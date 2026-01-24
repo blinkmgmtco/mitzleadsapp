@@ -24,7 +24,18 @@ import html
 # ============================================================================
 # IMPORTS WITH FALLBACKS
 # ============================================================================
+import os
+import sys
 
+# Check if we're running in Streamlit Cloud and adjust paths
+if 'STREAMLIT_CLOUD' in os.environ:
+    # Use temporary directory for database and configs
+    os.makedirs('/tmp/.leadscraper', exist_ok=True)
+    CONFIG_FILE = '/tmp/.leadscraper/config.json'
+    DB_FILE = '/tmp/.leadscraper/crm_database.db'
+else:
+    CONFIG_FILE = "config.json"
+    DB_FILE = "crm_database.db"
 try:
     import requests
     from bs4 import BeautifulSoup

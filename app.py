@@ -4152,6 +4152,10 @@ class MitzMediaDashboard:
 # MAIN EXECUTION
 # ============================================================================
 
+# ============================================================================
+# UPDATED MAIN FUNCTION WITH ERROR HANDLING
+# ============================================================================
+
 def main():
     print("\n" + "="*80)
     print("🚀 COMPREHENSIVE LEAD SCRAPER CRM - MITZMEDIA EDITION")
@@ -4170,26 +4174,47 @@ def main():
     print("  ✅ System logs viewer")
     print("="*80)
     
-    # Check API keys
-    if not CONFIG.get("serper_api_key"):
+    # Check API keys with safe access
+    if not CONFIG.get("serper_api_key") or CONFIG.get("serper_api_key", "").startswith("YOUR_"):
         print("\n❌ Update Serper API key in config.json")
         print("   Get from: https://serper.dev")
         print("   Current config file: config.json")
+        print("   You can also update it in the dashboard Settings → API Keys")
+    else:
+        print("\n✅ Serper API key configured")
     
-    if not CONFIG.get("openai_api_key") or CONFIG.get("openai_api_key", "").startswith("sk-proj-your-key-here"):
+    # Check OpenAI with safe access
+    openai_key = CONFIG.get("openai_api_key", "")
+    if not openai_key or openai_key.startswith(("sk-proj-your-key-here", "YOUR_OPENAI")):
         print("\n⚠️  OpenAI API key not configured - AI features disabled")
         print("   Get from: https://platform.openai.com/api-keys")
+        print("   You can also update it in the dashboard Settings → API Keys")
     elif OPENAI_AVAILABLE:
         print("\n✅ OpenAI configured - AI features enabled")
     
+    # Safe access to enhanced_features with defaults
+    enhanced_features = CONFIG.get("enhanced_features", {
+        "check_google_ads": True,
+        "find_google_business": True,
+        "scrape_yelp_reviews": True,
+        "auto_social_media": True,
+        "lead_scoring_ai": True
+    })
+    
+    # Safe access to filters with defaults
+    filters = CONFIG.get("filters", {
+        "exclude_without_websites": False,
+        "exclude_without_phone": True
+    })
+    
     print(f"\n🎯 Targeting Settings:")
-    print(f"   • Include no-website leads: {not CONFIG['filters']['exclude_without_websites']}")
-    print(f"   • Check Google Ads: {CONFIG['enhanced_features']['check_google_ads']}")
-    print(f"   • Find Google Business: {CONFIG['enhanced_features']['find_google_business']}")
-    print(f"🏙️  State: {CONFIG['state']}")
-    print(f"🏙️  Cities: {len(CONFIG['cities'])}")
-    print(f"🏭 Industries: {len(CONFIG['industries'])}")
-    print(f"⏱️  Interval: {CONFIG['cycle_interval']}s")
+    print(f"   • Include no-website leads: {not filters.get('exclude_without_websites', True)}")
+    print(f"   • Check Google Ads: {enhanced_features.get('check_google_ads', True)}")
+    print(f"   • Find Google Business: {enhanced_features.get('find_google_business', True)}")
+    print(f"🏙️  State: {CONFIG.get('state', 'PA')}")
+    print(f"🏙️  Cities: {len(CONFIG.get('cities', []))}")
+    print(f"🏭 Industries: {len(CONFIG.get('industries', []))}")
+    print(f"⏱️  Interval: {CONFIG.get('cycle_interval', 300)}s")
     print("="*80)
     
     # Check Streamlit availability
@@ -4199,29 +4224,39 @@ def main():
         return
     
     # Create and run dashboard
-    dashboard = MitzMediaDashboard()
-    
-    if not dashboard.enabled:
-        print("\n❌ Dashboard failed to initialize")
-        return
-    
-    print(f"\n🌐 Starting Streamlit dashboard on port {CONFIG['dashboard']['port']}...")
-    print(f"📱 Access at: http://localhost:{CONFIG['dashboard']['port']}")
-    print("\n📊 Available features:")
-    print("  • MitzMedia-inspired dashboard with real-time stats")
-    print("  • Enhanced targeting for businesses without websites")
-    print("  • Google Ads detection and Business Profile extraction")
-    print("  • Lead management with advanced filtering")
-    print("  • Lead details view with targeting insights")
-    print("  • Settings configuration with all new features")
-    print("  • Advanced analytics with performance metrics")
-    print("  • Export functionality (CSV, JSON, Excel)")
-    print("  • System logs viewer")
-    print("  • Auto-scraping with configurable intervals")
-    print("="*80)
-    
-    # Run Streamlit app
-    dashboard.run()
+    try:
+        dashboard = MitzMediaDashboard()
+        
+        if not dashboard.enabled:
+            print("\n❌ Dashboard failed to initialize")
+            return
+        
+        print(f"\n🌐 Starting Streamlit dashboard on port {CONFIG.get('dashboard', {}).get('port', 8501)}...")
+        print(f"📱 Access at: http://localhost:{CONFIG.get('dashboard', {}).get('port', 8501)}")
+        print("\n📊 Available features:")
+        print("  • MitzMedia-inspired dashboard with real-time stats")
+        print("  • Enhanced targeting for businesses without websites")
+        print("  • Google Ads detection and Business Profile extraction")
+        print("  • Lead management with advanced filtering")
+        print("  • Lead details view with targeting insights")
+        print("  • Settings configuration with all new features")
+        print("  • Advanced analytics with performance metrics")
+        print("  • Export functionality (CSV, JSON, Excel)")
+        print("  • System logs viewer")
+        print("  • Auto-scraping with configurable intervals")
+        print("="*80)
+        
+        # Run Streamlit app
+        dashboard.run()
+        
+    except Exception as e:
+        print(f"\n❌ Dashboard initialization error: {e}")
+        print("\n🔄 Try resetting your config.json with:")
+        print("   1. Delete config.json")
+        print("   2. Restart the application")
+        print("   3. Update API keys in Settings → API Keys")
+        import traceback
+        traceback.print_exc()
 
 # ============================================================================
 # ENTRY POINT

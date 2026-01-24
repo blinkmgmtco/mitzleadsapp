@@ -2368,8 +2368,8 @@ class StreamlitDashboard:
             st.markdown("""
             <div style="text-align: center; margin-bottom: 2rem;">
                 <div style="font-size: 2.5rem;">🚀</div>
-                <h1 style="color: #f59e0b; margin: 0;">LeadScraper CRM</h1>
-                <p style="color: #94a3b8; margin: 0;">Production v7.0</p>
+                <h1 style="color: #f59e0b; margin: 0;">Mitz</h1>
+                <p style="color: #94a3b8; margin: 0;">automated crm</p>
             </div>
             """, unsafe_allow_html=True)
             

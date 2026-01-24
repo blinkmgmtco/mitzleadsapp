@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-🚀 MITZ LEADS CRM - PREMIUM LEAD SCRAPER & MANAGEMENT
-Professional Streamlit Dashboard with Modern UI
+🚀 COMPREHENSIVE LEAD SCRAPER CRM - STREAMLIT EDITION
+Fully working with web scraping, AI enrichment, SQLite CRM, and Streamlit dashboard
 """
 
 import json
@@ -30,13 +30,12 @@ import sys
 # Check if we're running in Streamlit Cloud and adjust paths
 if 'STREAMLIT_CLOUD' in os.environ:
     # Use temporary directory for database and configs
-    os.makedirs('/tmp/.mitzleads', exist_ok=True)
-    CONFIG_FILE = '/tmp/.mitzleads/config.json'
-    DB_FILE = '/tmp/.mitzleads/crm_database.db'
+    os.makedirs('/tmp/.leadscraper', exist_ok=True)
+    CONFIG_FILE = '/tmp/.leadscraper/config.json'
+    DB_FILE = '/tmp/.leadscraper/crm_database.db'
 else:
     CONFIG_FILE = "config.json"
     DB_FILE = "crm_database.db"
-    
 try:
     import requests
     from bs4 import BeautifulSoup
@@ -58,12 +57,11 @@ try:
     import pandas as pd
     import plotly.express as px
     import plotly.graph_objects as go
-    from streamlit_option_menu import option_menu
     from streamlit_autorefresh import st_autorefresh
     STREAMLIT_AVAILABLE = True
 except ImportError:
     STREAMLIT_AVAILABLE = False
-    print("⚠️  Streamlit not installed. Install with: pip install streamlit pandas plotly streamlit-option-menu streamlit-autorefresh")
+    print("⚠️  Streamlit not installed. Install with: pip install streamlit pandas plotly streamlit-autorefresh")
 
 # ============================================================================
 # CONFIGURATION
@@ -72,12 +70,12 @@ except ImportError:
 CONFIG_FILE = "config.json"
 DB_FILE = "crm_database.db"
 
-# Default configuration - Professional Mitz Leads CRM theme
+# Default configuration - Matches MitzMedia theme colors
 DEFAULT_CONFIG = {
-    "machine_id": "mitz-leads-crm-pro-v1",
-    "machine_version": "6.0",
+    "machine_id": "lead-scraper-crm-v1",
+    "machine_version": "5.0",
     "serper_api_key": "bab72f11620025db8aee1df5b905b9d9b6872a00",
-    "openai_api_key": "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",
+    "openai_api_key": "sk-proj-your-key-here",
     
     # CRM Settings
     "crm": {
@@ -88,7 +86,7 @@ DEFAULT_CONFIG = {
         "duplicate_check_field": "fingerprint",
         "batch_size": 10,
         "default_status": "New Lead",
-        "default_assigned_to": "Sales Team",
+        "default_assigned_to": "",
         "auto_set_production_date": True
     },
     
@@ -127,21 +125,18 @@ DEFAULT_CONFIG = {
         ]
     },
     
-    # Professional Theme
+    # UI Theme (MitzMedia inspired)
     "ui": {
-        "theme": "professional",
-        "primary_color": "#1a56db",
-        "secondary_color": "#7e3af2",
+        "theme": "mitzmedia",
+        "primary_color": "#2563eb",
+        "secondary_color": "#1e40af",
         "accent_color": "#f59e0b",
-        "success_color": "#0e9f6e",
-        "danger_color": "#f05252",
-        "warning_color": "#faca15",
+        "success_color": "#10b981",
+        "danger_color": "#ef4444",
         "dark_bg": "#111827",
-        "light_bg": "#f8fafc",
-        "card_bg": "#ffffff",
+        "light_bg": "#f9fafb",
         "text_light": "#f9fafb",
-        "text_dark": "#1f2937",
-        "border_color": "#e5e7eb"
+        "text_dark": "#111827"
     },
     
     # Scraper Settings
@@ -228,7 +223,7 @@ DEFAULT_CONFIG = {
         "port": 8501,
         "host": "0.0.0.0",
         "debug": False,
-        "secret_key": "mitz-leads-crm-secret-key-2024"
+        "secret_key": "lead-scraper-secret-key-2024"
     }
 }
 
@@ -253,7 +248,61 @@ def load_config():
 CONFIG = load_config()
 
 # ============================================================================
-# DATABASE (SQLite CRM) - SAME AS BEFORE
+# LOGGER
+# ============================================================================
+
+class Logger:
+    """Simple logger"""
+    
+    def __init__(self):
+        self.log_file = CONFIG["storage"]["logs_file"]
+    
+    def log(self, message, level="INFO"):
+        """Log message"""
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        colors = {
+            "INFO": "\033[94m",
+            "SUCCESS": "\033[92m",
+            "WARNING": "\033[93m",
+            "ERROR": "\033[91m",
+            "DEBUG": "\033[90m"
+        }
+        
+        color = colors.get(level, "\033[0m")
+        print(f"{color}[{timestamp}] {level}: {message}\033[0m")
+        
+        # Save to file
+        try:
+            logs = []
+            if os.path.exists(self.log_file):
+                try:
+                    with open(self.log_file, "r") as f:
+                        logs = json.load(f)
+                except:
+                    pass
+            
+            log_entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "level": level,
+                "message": message
+            }
+            
+            logs.append(log_entry)
+            
+            if len(logs) > 1000:
+                logs = logs[-1000:]
+            
+            with open(self.log_file, "w") as f:
+                json.dump(logs, f, indent=2)
+                
+        except Exception as e:
+            print(f"Log save error: {e}")
+
+logger = Logger()
+
+# ============================================================================
+# DATABASE (SQLite CRM)
 # ============================================================================
 
 class CRM_Database:
@@ -331,7 +380,7 @@ class CRM_Database:
                 )
             ''')
             
-            # Users table
+            # Users table (for assignments)
             self.cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -374,31 +423,12 @@ class CRM_Database:
                 )
             ''')
             
-            # Scraper state table
-            self.cursor.execute('''
-                CREATE TABLE IF NOT EXISTS scraper_state (
-                    id INTEGER PRIMARY KEY DEFAULT 1,
-                    is_running BOOLEAN DEFAULT 0,
-                    last_started DATETIME,
-                    last_stopped DATETIME,
-                    total_cycles INTEGER DEFAULT 0,
-                    leads_scraped INTEGER DEFAULT 0,
-                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                    CHECK (id = 1)
-                )
-            ''')
-            
-            # Insert default scraper state
-            self.cursor.execute('''
-                INSERT OR IGNORE INTO scraper_state (id, is_running) VALUES (1, 0)
-            ''')
-            
-            # Insert default settings
+            # Insert default settings if not exists
             default_settings = [
                 ('scraper_enabled', 'true', 'boolean', 'scraper', 'Enable automatic scraping'),
                 ('scraper_interval', '300', 'number', 'scraper', 'Scraping interval in seconds'),
                 ('auto_save', 'true', 'boolean', 'crm', 'Auto-save leads to CRM'),
-                ('dashboard_theme', 'professional', 'string', 'ui', 'Dashboard theme'),
+                ('dashboard_theme', 'mitzmedia', 'string', 'ui', 'Dashboard theme'),
                 ('notification_enabled', 'true', 'boolean', 'notifications', 'Enable notifications')
             ]
             
@@ -409,9 +439,10 @@ class CRM_Database:
                 ''', (key, value, stype, category, desc))
             
             self.conn.commit()
+            logger.log("✅ Database initialized", "SUCCESS")
             
         except Exception as e:
-            print(f"❌ Database error: {e}")
+            logger.log(f"❌ Database error: {e}", "ERROR")
     
     def get_connection(self):
         """Get a new database connection to avoid cursor conflicts"""
@@ -419,13 +450,592 @@ class CRM_Database:
         conn.row_factory = sqlite3.Row
         return conn
     
-    # [Keep all the existing database methods from the original code]
-    # save_lead, update_statistics, get_leads, get_lead_by_id, update_lead, delete_lead,
-    # get_statistics, get_settings, update_setting, get_today_count, get_all_settings, update_config_file
-    # ... (Include all the existing database methods here - they remain the same)
+    def save_lead(self, lead_data):
+        """Save lead to database"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Extract data
+            fingerprint = lead_data.get("fingerprint", "")
+            
+            # Check for duplicate
+            if CONFIG["crm"]["prevent_duplicates"] and fingerprint:
+                cursor.execute("SELECT id FROM leads WHERE fingerprint = ?", (fingerprint,))
+                existing = cursor.fetchone()
+                if existing:
+                    return {"success": False, "message": "Duplicate lead", "lead_id": existing[0]}
+            
+            # Prepare lead data
+            business_name = lead_data.get("business_name", "Unknown Business")[:200]
+            website = lead_data.get("website", lead_data.get("website_url", ""))[:200]
+            
+            # Get phone
+            phone = ""
+            phones = lead_data.get("phones", [])
+            if phones and isinstance(phones, list) and len(phones) > 0:
+                phone = str(phones[0]) if phones[0] else ""
+            if not phone:
+                phone = lead_data.get("phone", "") or ""
+            
+            # Get email
+            email = ""
+            emails = lead_data.get("emails", [])
+            if emails and isinstance(emails, list) and len(emails) > 0:
+                email = str(emails[0]) if emails[0] else ""
+            
+            # Get address
+            address = lead_data.get("address", "")
+            if not address and lead_data.get("city"):
+                address = f"{lead_data.get('city')}, {lead_data.get('state', CONFIG['state'])}"
+            
+            # Services
+            services = lead_data.get("services", "")
+            if isinstance(services, list):
+                services = ", ".join(services)
+            
+            # Social media
+            social_media = lead_data.get("social_media", "")
+            if isinstance(social_media, dict):
+                social_media = json.dumps(social_media)
+            
+            # Quality tier and potential value
+            quality_tier = lead_data.get("quality_tier", "Unknown")
+            potential_value = lead_data.get("potential_value", 0)
+            if not potential_value:
+                # Map quality tier to dollar amounts
+                tier_map = {
+                    "PREMIUM": 10000,
+                    "Premium": 10000,
+                    "HIGH": 7500,
+                    "High": 7500,
+                    "MEDIUM": 5000,
+                    "Medium": 5000,
+                    "LOW": 2500,
+                    "Low": 2500,
+                    "UNKNOWN": 0,
+                    "Unknown": 0
+                }
+                potential_value = tier_map.get(quality_tier, 0)
+            
+            # Outreach priority based on score
+            lead_score = lead_data.get("lead_score", 0)
+            if lead_score >= 80:
+                outreach_priority = "Immediate"
+            elif lead_score >= 60:
+                outreach_priority = "High"
+            elif lead_score >= 40:
+                outreach_priority = "Medium"
+            else:
+                outreach_priority = "Low"
+            
+            # Follow-up date (7 days from now)
+            follow_up_date = (datetime.now(timezone.utc) + timedelta(days=7)).date().isoformat()
+            
+            # Insert lead
+            cursor.execute('''
+                INSERT OR REPLACE INTO leads (
+                    fingerprint, business_name, website, phone, email, address,
+                    city, state, industry, business_type, services, description,
+                    social_media, lead_score, quality_tier, potential_value,
+                    outreach_priority, lead_status, assigned_to, lead_production_date,
+                    follow_up_date, notes, ai_notes, source, scraped_date
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                fingerprint, business_name, website, phone, email, address,
+                lead_data.get("city", ""), lead_data.get("state", CONFIG["state"]),
+                lead_data.get("industry", ""), lead_data.get("business_type", "LLC"),
+                services[:500], lead_data.get("description", "")[:1000],
+                social_media[:500], lead_score, quality_tier, potential_value,
+                outreach_priority, CONFIG["crm"]["default_status"],
+                CONFIG["crm"]["default_assigned_to"],
+                datetime.now(timezone.utc).date().isoformat() if CONFIG["crm"]["auto_set_production_date"] else None,
+                follow_up_date, "", lead_data.get("ai_notes", "")[:500],
+                "Web Scraper", lead_data.get("scraped_date", datetime.now(timezone.utc).isoformat())
+            ))
+            
+            lead_id = cursor.lastrowid
+            
+            # Add activity log
+            cursor.execute('''
+                INSERT INTO activities (lead_id, activity_type, activity_details)
+                VALUES (?, ?, ?)
+            ''', (lead_id, "Lead Created", f"Lead scraped from {website}"))
+            
+            conn.commit()
+            
+            # Update statistics
+            self.update_statistics(cursor)
+            
+            return {"success": True, "lead_id": lead_id, "message": "Lead saved"}
+            
+        except Exception as e:
+            conn.rollback()
+            logger.log(f"Save lead error: {e}", "ERROR")
+            return {"success": False, "message": f"Error: {str(e)}"}
+        finally:
+            conn.close()
+    
+    def update_statistics(self, cursor=None):
+        """Update daily statistics"""
+        conn = None
+        try:
+            if cursor is None:
+                conn = self.get_connection()
+                cursor = conn.cursor()
+            
+            today = datetime.now(timezone.utc).date().isoformat()
+            
+            # Get current stats
+            cursor.execute('''
+                SELECT 
+                    COUNT(*) as total_leads,
+                    SUM(CASE WHEN lead_status = 'New Lead' THEN 1 ELSE 0 END) as new_leads,
+                    SUM(CASE WHEN lead_status = 'Contacted' THEN 1 ELSE 0 END) as contacted_leads,
+                    SUM(CASE WHEN lead_status = 'Meeting Scheduled' THEN 1 ELSE 0 END) as meetings_scheduled,
+                    SUM(CASE WHEN lead_status = 'Closed (Won)' THEN 1 ELSE 0 END) as closed_won,
+                    SUM(CASE WHEN lead_status = 'Closed (Lost)' THEN 1 ELSE 0 END) as closed_lost,
+                    SUM(CASE WHEN quality_tier IN ('Premium', 'High') THEN 1 ELSE 0 END) as premium_leads,
+                    SUM(potential_value) as estimated_value
+                FROM leads 
+                WHERE DATE(created_at) = DATE('now') AND is_archived = 0
+            ''')
+            
+            stats = cursor.fetchone()
+            if not stats:
+                stats = (0, 0, 0, 0, 0, 0, 0, 0)
+            
+            cursor.execute('''
+                INSERT OR REPLACE INTO statistics 
+                (stat_date, total_leads, new_leads, contacted_leads, meetings_scheduled, 
+                 closed_won, closed_lost, premium_leads, estimated_value)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (today, *stats))
+            
+            if conn:
+                conn.commit()
+            
+        except Exception as e:
+            logger.log(f"Statistics update error: {e}", "ERROR")
+        finally:
+            if conn:
+                conn.close()
+    
+    def get_leads(self, filters=None, page=1, per_page=50):
+        """Get leads with pagination and filtering"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            query = "SELECT * FROM leads WHERE is_archived = 0"
+            params = []
+            
+            if filters:
+                conditions = []
+                if filters.get("status"):
+                    conditions.append("lead_status = ?")
+                    params.append(filters["status"])
+                if filters.get("quality_tier"):
+                    conditions.append("quality_tier = ?")
+                    params.append(filters["quality_tier"])
+                if filters.get("city"):
+                    conditions.append("city LIKE ?")
+                    params.append(f"%{filters['city']}%")
+                if filters.get("industry"):
+                    conditions.append("industry LIKE ?")
+                    params.append(f"%{filters['industry']}%")
+                if filters.get("search"):
+                    search_term = f"%{filters['search']}%"
+                    conditions.append("(business_name LIKE ? OR website LIKE ? OR phone LIKE ? OR email LIKE ?)")
+                    params.extend([search_term, search_term, search_term, search_term])
+                if filters.get("date_from"):
+                    conditions.append("DATE(created_at) >= ?")
+                    params.append(filters["date_from"])
+                if filters.get("date_to"):
+                    conditions.append("DATE(created_at) <= ?")
+                    params.append(filters["date_to"])
+                
+                if conditions:
+                    query += " AND " + " AND ".join(conditions)
+            
+            # Get total count
+            count_query = f"SELECT COUNT(*) FROM ({query})"
+            cursor.execute(count_query, params)
+            result = cursor.fetchone()
+            total = result[0] if result else 0
+            
+            # Add pagination
+            query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+            params.extend([per_page, (page - 1) * per_page])
+            
+            cursor.execute(query, params)
+            leads = cursor.fetchall()
+            
+            # Convert to list of dictionaries
+            result = []
+            for lead in leads:
+                lead_dict = dict(lead)
+                
+                # Parse social media if it's a JSON string
+                if lead_dict.get("social_media") and isinstance(lead_dict["social_media"], str):
+                    try:
+                        lead_dict["social_media"] = json.loads(lead_dict["social_media"])
+                    except:
+                        pass
+                
+                result.append(lead_dict)
+            
+            return {
+                "leads": result,
+                "total": total,
+                "page": page,
+                "per_page": per_page,
+                "total_pages": (total + per_page - 1) // per_page if per_page > 0 else 0
+            }
+            
+        except Exception as e:
+            logger.log(f"Get leads error: {e}", "ERROR")
+            return {"leads": [], "total": 0, "page": page, "per_page": per_page}
+        finally:
+            conn.close()
+    
+    def get_lead_by_id(self, lead_id):
+        """Get single lead by ID"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("SELECT * FROM leads WHERE id = ?", (lead_id,))
+            lead = cursor.fetchone()
+            
+            if not lead:
+                return None
+            
+            lead_dict = dict(lead)
+            
+            # Get activities
+            cursor.execute("SELECT * FROM activities WHERE lead_id = ? ORDER BY performed_at DESC", (lead_id,))
+            activities = cursor.fetchall()
+            lead_dict["activities"] = [dict(activity) for activity in activities]
+            
+            # Parse JSON fields
+            if lead_dict.get("social_media") and isinstance(lead_dict["social_media"], str):
+                try:
+                    lead_dict["social_media"] = json.loads(lead_dict["social_media"])
+                except:
+                    lead_dict["social_media"] = {}
+            
+            if lead_dict.get("services") and isinstance(lead_dict["services"], str):
+                try:
+                    lead_dict["services"] = json.loads(lead_dict["services"])
+                except:
+                    if "," in lead_dict["services"]:
+                        lead_dict["services"] = [s.strip() for s in lead_dict["services"].split(",") if s.strip()]
+                    else:
+                        lead_dict["services"] = [lead_dict["services"]]
+            
+            return lead_dict
+            
+        except Exception as e:
+            logger.log(f"Get lead error: {e}", "ERROR")
+            return None
+        finally:
+            conn.close()
+    
+    def update_lead(self, lead_id, update_data):
+        """Update lead information"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Build update query
+            set_clause = []
+            params = []
+            
+            for field, value in update_data.items():
+                set_clause.append(f"{field} = ?")
+                params.append(value)
+            
+            params.append(lead_id)
+            query = f"UPDATE leads SET {', '.join(set_clause)}, last_updated = CURRENT_TIMESTAMP WHERE id = ?"
+            
+            cursor.execute(query, params)
+            
+            # Log activity
+            activity_desc = f"Updated: {', '.join(update_data.keys())}"
+            cursor.execute('''
+                INSERT INTO activities (lead_id, activity_type, activity_details)
+                VALUES (?, ?, ?)
+            ''', (lead_id, "Lead Updated", activity_desc))
+            
+            conn.commit()
+            
+            return {"success": True, "message": "Lead updated"}
+            
+        except Exception as e:
+            conn.rollback()
+            return {"success": False, "message": f"Error: {str(e)}"}
+        finally:
+            conn.close()
+    
+    def delete_lead(self, lead_id):
+        """Soft delete lead (archive)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE leads 
+                SET is_archived = 1, archive_date = CURRENT_TIMESTAMP 
+                WHERE id = ?
+            ''', (lead_id,))
+            
+            cursor.execute('''
+                INSERT INTO activities (lead_id, activity_type, activity_details)
+                VALUES (?, ?, ?)
+            ''', (lead_id, "Lead Archived", "Lead moved to archive"))
+            
+            conn.commit()
+            
+            return {"success": True, "message": "Lead archived"}
+            
+        except Exception as e:
+            conn.rollback()
+            return {"success": False, "message": f"Error: {str(e)}"}
+        finally:
+            conn.close()
+    
+    def get_statistics(self, days=30):
+        """Get statistics for dashboard"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            stats = {}
+            
+            # Overall stats
+            cursor.execute('''
+                SELECT 
+                    COUNT(*) as total_leads,
+                    SUM(CASE WHEN lead_status = 'New Lead' THEN 1 ELSE 0 END) as new_leads,
+                    SUM(CASE WHEN lead_status = 'Closed (Won)' THEN 1 ELSE 0 END) as closed_won,
+                    SUM(CASE WHEN lead_status = 'Closed (Lost)' THEN 1 ELSE 0 END) as closed_lost,
+                    SUM(potential_value) as total_value,
+                    AVG(lead_score) as avg_score
+                FROM leads 
+                WHERE is_archived = 0
+            ''')
+            
+            overall = cursor.fetchone()
+            if overall:
+                stats["overall"] = dict(overall)
+            else:
+                stats["overall"] = {
+                    "total_leads": 0,
+                    "new_leads": 0,
+                    "closed_won": 0,
+                    "closed_lost": 0,
+                    "total_value": 0,
+                    "avg_score": 0
+                }
+            
+            # Status distribution
+            cursor.execute('''
+                SELECT lead_status, COUNT(*) as count
+                FROM leads 
+                WHERE is_archived = 0
+                GROUP BY lead_status
+                ORDER BY count DESC
+            ''')
+            
+            stats["status_distribution"] = [
+                {"status": row[0], "count": row[1]} 
+                for row in cursor.fetchall()
+            ]
+            
+            # Quality tier distribution
+            cursor.execute('''
+                SELECT quality_tier, COUNT(*) as count
+                FROM leads 
+                WHERE is_archived = 0 AND quality_tier != 'Unknown'
+                GROUP BY quality_tier
+                ORDER BY 
+                    CASE quality_tier
+                        WHEN 'Premium' THEN 1
+                        WHEN 'High' THEN 2
+                        WHEN 'Medium' THEN 3
+                        WHEN 'Low' THEN 4
+                        ELSE 5
+                    END
+            ''')
+            
+            stats["quality_distribution"] = [
+                {"tier": row[0], "count": row[1]} 
+                for row in cursor.fetchall()
+            ]
+            
+            # Daily leads (last 30 days)
+            cursor.execute('''
+                SELECT DATE(created_at) as date, COUNT(*) as count
+                FROM leads 
+                WHERE is_archived = 0 AND created_at >= DATE('now', ?)
+                GROUP BY DATE(created_at)
+                ORDER BY date DESC
+            ''', (f"-{days} days",))
+            
+            stats["daily_leads"] = [
+                {"date": row[0], "count": row[1]} 
+                for row in cursor.fetchall()
+            ]
+            
+            # City distribution
+            cursor.execute('''
+                SELECT city, COUNT(*) as count
+                FROM leads 
+                WHERE is_archived = 0 AND city != ''
+                GROUP BY city
+                ORDER BY count DESC
+                LIMIT 10
+            ''')
+            
+            stats["city_distribution"] = [
+                {"city": row[0], "count": row[1]} 
+                for row in cursor.fetchall()
+            ]
+            
+            # Industry distribution
+            cursor.execute('''
+                SELECT industry, COUNT(*) as count
+                FROM leads 
+                WHERE is_archived = 0 AND industry != ''
+                GROUP BY industry
+                ORDER BY count DESC
+                LIMIT 10
+            ''')
+            
+            stats["industry_distribution"] = [
+                {"industry": row[0], "count": row[1]} 
+                for row in cursor.fetchall()
+            ]
+            
+            return stats
+            
+        except Exception as e:
+            logger.log(f"Statistics error: {e}", "ERROR")
+            return {
+                "overall": {
+                    "total_leads": 0,
+                    "new_leads": 0,
+                    "closed_won": 0,
+                    "closed_lost": 0,
+                    "total_value": 0,
+                    "avg_score": 0
+                },
+                "status_distribution": [],
+                "quality_distribution": [],
+                "daily_leads": [],
+                "city_distribution": [],
+                "industry_distribution": []
+            }
+        finally:
+            conn.close()
+    
+    def get_settings(self):
+        """Get all settings"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("SELECT * FROM settings ORDER BY category, setting_key")
+            settings = cursor.fetchall()
+            
+            result = {}
+            for setting in settings:
+                result[setting['setting_key']] = {
+                    "value": setting['setting_value'],
+                    "type": setting['setting_type'],
+                    "category": setting['category'],
+                    "description": setting['description']
+                }
+            
+            return result
+        except Exception as e:
+            logger.log(f"Get settings error: {e}", "ERROR")
+            return {}
+        finally:
+            conn.close()
+    
+    def update_setting(self, key, value):
+        """Update a setting"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                UPDATE settings SET setting_value = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE setting_key = ?
+            ''', (value, key))
+            
+            conn.commit()
+            return {"success": True, "message": "Setting updated"}
+        except Exception as e:
+            conn.rollback()
+            return {"success": False, "message": f"Error: {str(e)}"}
+        finally:
+            conn.close()
+    
+    def get_today_count(self):
+        """Get today's lead count"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute("SELECT COUNT(*) FROM leads WHERE DATE(created_at) = DATE('now') AND is_archived = 0")
+            result = cursor.fetchone()
+            return result[0] if result else 0
+        except Exception as e:
+            logger.log(f"Today count error: {e}", "ERROR")
+            return 0
+        finally:
+            conn.close()
+    
+    def get_all_settings(self):
+        """Get ALL configuration settings"""
+        try:
+            return CONFIG
+        except Exception as e:
+            logger.log(f"Get all settings error: {e}", "ERROR")
+            return {}
+    
+    def update_config_file(self, updated_config):
+        """Update the config.json file"""
+        global CONFIG
+        try:
+            # Validate the config structure
+            if not isinstance(updated_config, dict):
+                return {"success": False, "message": "Invalid configuration format"}
+            
+            # Backup original config
+            backup_file = f"config_backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            with open(backup_file, "w") as f:
+                json.dump(CONFIG, f, indent=2)
+            
+            # Update config file
+            with open(CONFIG_FILE, "w") as f:
+                json.dump(updated_config, f, indent=2)
+            
+            # Reload config
+            CONFIG = updated_config
+            
+            logger.log("Configuration updated successfully", "SUCCESS")
+            return {"success": True, "message": "Configuration updated", "backup": backup_file}
+            
+        except Exception as e:
+            logger.log(f"Update config error: {e}", "ERROR")
+            return {"success": False, "message": f"Error: {str(e)}"}
 
 # ============================================================================
-# WEBSITE SCRAPER - SAME AS BEFORE
+# WEBSITE SCRAPER
 # ============================================================================
 
 class WebsiteScraper:
@@ -447,15 +1057,221 @@ class WebsiteScraper:
                 try:
                     self.openai_client = openai.OpenAI(api_key=api_key)
                 except:
-                    print("⚠️ OpenAI initialization failed")
+                    logger.log("OpenAI initialization failed", "WARNING")
     
-    # [Keep all the existing WebsiteScraper methods from the original code]
-    # scrape_website, _extract_business_name, _extract_description, _extract_phones,
-    # _extract_emails, _extract_address, _extract_social_media, _extract_services
-    # ... (Include all the existing scraper methods here - they remain the same)
+    def scrape_website(self, url):
+        """Scrape website for contact information"""
+        if not url or not url.startswith(('http://', 'https://')):
+            return {}
+        
+        try:
+            headers = {
+                'User-Agent': random.choice(self.user_agents),
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
+            
+            response = requests.get(url, headers=headers, timeout=10)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Extract information
+            data = {
+                'website': url,
+                'business_name': self._extract_business_name(soup, url),
+                'description': self._extract_description(soup),
+                'phones': self._extract_phones(soup),
+                'emails': self._extract_emails(soup),
+                'address': self._extract_address(soup),
+                'social_media': self._extract_social_media(soup),
+                'services': self._extract_services(soup)
+            }
+            
+            return data
+            
+        except Exception as e:
+            logger.log(f"Scrape error for {url}: {e}", "WARNING")
+            return {}
+    
+    def _extract_business_name(self, soup, url):
+        """Extract business name from website"""
+        # Try meta tags first
+        for meta in soup.find_all('meta'):
+            if meta.get('property') in ['og:site_name', 'og:title']:
+                return meta.get('content', '')[:200]
+        
+        # Try title tag
+        if soup.title and soup.title.string:
+            title = soup.title.string.strip()
+            # Remove common suffixes
+            for suffix in [' - Home', ' | Home', ' - Official Site', ' | Official Site']:
+                if title.endswith(suffix):
+                    title = title[:-len(suffix)]
+            return title[:200]
+        
+        # Try h1 tags
+        h1_tags = soup.find_all('h1')
+        if h1_tags:
+            return h1_tags[0].get_text(strip=True)[:200]
+        
+        # Fallback to domain name
+        domain = urlparse(url).netloc
+        return domain.replace('www.', '').split('.')[0].title()
+    
+    def _extract_description(self, soup):
+        """Extract description from website"""
+        # Try meta description
+        meta_desc = soup.find('meta', attrs={'name': 'description'})
+        if meta_desc and meta_desc.get('content'):
+            return meta_desc.get('content')[:500]
+        
+        # Try first paragraph
+        paragraphs = soup.find_all('p')
+        for p in paragraphs:
+            text = p.get_text(strip=True)
+            if len(text) > 50:
+                return text[:500]
+        
+        return ""
+    
+    def _extract_phones(self, soup):
+        """Extract phone numbers from website"""
+        phones = set()
+        text = soup.get_text()
+        
+        # Common phone patterns
+        phone_patterns = [
+            r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',  # US format
+            r'\d{3}[-.\s]?\d{3}[-.\s]?\d{4}',        # Another US format
+            r'\+1[-.\s]?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',  # US with +1
+        ]
+        
+        for pattern in phone_patterns:
+            matches = re.findall(pattern, text)
+            for match in matches:
+                # Clean up the phone number
+                phone = re.sub(r'[^\d+]', '', match)
+                if len(phone) >= 10:
+                    phones.add(phone)
+        
+        # Also look in specific elements
+        phone_elements = soup.find_all(['a', 'span', 'div'], text=re.compile(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}'))
+        for elem in phone_elements:
+            text = elem.get_text(strip=True)
+            matches = re.findall(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', text)
+            for match in matches:
+                phone = re.sub(r'[^\d+]', '', match)
+                if len(phone) >= 10:
+                    phones.add(phone)
+        
+        return list(phones)[:3]  # Return max 3 phones
+    
+    def _extract_emails(self, soup):
+        """Extract email addresses from website"""
+        emails = set()
+        text = soup.get_text()
+        
+        # Email pattern
+        email_pattern = r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}'
+        matches = re.findall(email_pattern, text)
+        emails.update(matches)
+        
+        # Also look in mailto links
+        mailto_links = soup.find_all('a', href=re.compile(r'mailto:'))
+        for link in mailto_links:
+            href = link.get('href', '')
+            email_match = re.search(r'mailto:([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})', href)
+            if email_match:
+                emails.add(email_match.group(1))
+        
+        return list(emails)[:5]  # Return max 5 emails
+    
+    def _extract_address(self, soup):
+        """Extract address from website"""
+        text = soup.get_text()
+        
+        # Look for address patterns
+        address_patterns = [
+            r'\d+\s+[A-Za-z\s]+(?:Street|St|Avenue|Ave|Road|Rd|Boulevard|Blvd|Drive|Dr|Lane|Ln|Way|Court|Ct|Place|Pl),?\s+[A-Za-z\s]+,\s+[A-Z]{2}\s+\d{5}',
+            r'\d+\s+[A-Za-z\s]+,\s+[A-Za-z\s]+,\s+[A-Z]{2}\s+\d{5}',
+        ]
+        
+        for pattern in address_patterns:
+            matches = re.findall(pattern, text)
+            if matches:
+                return matches[0]
+        
+        return ""
+    
+    def _extract_social_media(self, soup):
+        """Extract social media links from website"""
+        social_media = {}
+        
+        social_platforms = {
+            'facebook': ['facebook.com', 'fb.com'],
+            'instagram': ['instagram.com'],
+            'linkedin': ['linkedin.com'],
+            'twitter': ['twitter.com', 'x.com'],
+            'youtube': ['youtube.com'],
+            'tiktok': ['tiktok.com']
+        }
+        
+        for platform, domains in social_platforms.items():
+            for a in soup.find_all('a', href=True):
+                href = a['href'].lower()
+                for domain in domains:
+                    if domain in href:
+                        social_media[platform] = a['href']
+                        break
+        
+        return social_media
+    
+    def _extract_services(self, soup):
+        """Extract services from website"""
+        services = []
+        
+        # Common keywords for contractor services
+        service_keywords = [
+            'installation', 'repair', 'maintenance', 'service', 'contractor',
+            'construction', 'remodeling', 'renovation', 'building', 'design',
+            'installation', 'repair', 'maintenance', 'cleaning', 'painting',
+            'electrical', 'plumbing', 'hvac', 'roofing', 'landscaping'
+        ]
+        
+        # Look in headings and lists
+        text_content = soup.get_text().lower()
+        
+        for keyword in service_keywords:
+            if keyword in text_content:
+                services.append(keyword.title())
+        
+        # Look for specific service sections
+        for heading in soup.find_all(['h2', 'h3', 'h4']):
+            heading_text = heading.get_text().lower()
+            if any(word in heading_text for word in ['service', 'what we do', 'our work', 'expertise']):
+                # Look at next elements for services
+                next_elem = heading.find_next()
+                for _ in range(10):  # Check next 10 elements
+                    if next_elem:
+                        if next_elem.name in ['ul', 'ol']:
+                            for li in next_elem.find_all('li'):
+                                services.append(li.get_text(strip=True)[:100])
+                        elif next_elem.name == 'p':
+                            text = next_elem.get_text(strip=True)
+                            if len(text) < 200:  # Short paragraphs are likely service descriptions
+                                services.append(text[:100])
+                        next_elem = next_elem.find_next_sibling()
+                    else:
+                        break
+        
+        return list(set(services))[:10]  # Return unique services, max 10
 
 # ============================================================================
-# LEAD SCRAPER (SERP API) - SAME AS BEFORE
+# LEAD SCRAPER (SERP API)
 # ============================================================================
 
 class ModernLeadScraper:
@@ -495,726 +1311,668 @@ class ModernLeadScraper:
         except:
             pass
     
-    # [Keep all the existing ModernLeadScraper methods from the original code]
-    # generate_search_queries, search_serper, is_blacklisted, extract_domain,
-    # generate_fingerprint, qualify_lead, process_lead, passes_filters, run_cycle, save_lead_to_file
-    # ... (Include all the existing scraper methods here - they remain the same)
+    def generate_search_queries(self):
+        """Generate search queries from config"""
+        queries = []
+        state = CONFIG["state"]
+        
+        for industry in CONFIG["industries"]:
+            for city in CONFIG["cities"]:
+                for phrase_template in CONFIG["search_phrases"]:
+                    query = phrase_template.format(
+                        industry=industry,
+                        city=city,
+                        state=state
+                    )
+                    queries.append({
+                        'query': query,
+                        'industry': industry,
+                        'city': city,
+                        'state': state
+                    })
+        
+        random.shuffle(queries)  # Randomize order
+        return queries[:CONFIG["searches_per_cycle"]]
+    
+    def search_serper(self, query):
+        """Search using Serper API"""
+        if not self.api_key:
+            logger.log("No Serper API key configured", "ERROR")
+            return []
+        
+        # Check cache first
+        cache_key = hashlib.md5(query.encode()).hexdigest()
+        if cache_key in self.cache:
+            logger.log(f"Using cached results for: {query}", "DEBUG")
+            return self.cache[cache_key]
+        
+        try:
+            url = "https://google.serper.dev/search"
+            headers = {
+                'X-API-KEY': self.api_key,
+                'Content-Type': 'application/json'
+            }
+            payload = {
+                'q': query,
+                'num': CONFIG["businesses_per_search"]
+            }
+            
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            
+            results = []
+            
+            # Extract organic results
+            if 'organic' in data:
+                for item in data['organic']:
+                    result = {
+                        'title': item.get('title', ''),
+                        'link': item.get('link', ''),
+                        'snippet': item.get('snippet', ''),
+                        'position': item.get('position', 0)
+                    }
+                    results.append(result)
+            
+            # Cache results
+            self.cache[cache_key] = results
+            self.save_cache()
+            
+            logger.log(f"Found {len(results)} results for: {query}", "INFO")
+            return results
+            
+        except Exception as e:
+            logger.log(f"Serper API error for '{query}': {e}", "ERROR")
+            return []
+    
+    def is_blacklisted(self, url):
+        """Check if domain is blacklisted"""
+        if not url:
+            return True
+        
+        domain = urlparse(url).netloc.lower()
+        
+        for blacklisted in CONFIG["blacklisted_domains"]:
+            if blacklisted in domain:
+                return True
+        
+        return False
+    
+    def extract_domain(self, url):
+        """Extract domain from URL"""
+        try:
+            parsed = urlparse(url)
+            domain = parsed.netloc.lower()
+            if domain.startswith('www.'):
+                domain = domain[4:]
+            return domain
+        except:
+            return ""
+    
+    def generate_fingerprint(self, business_name, website, phone, city):
+        """Generate fingerprint for duplicate detection"""
+        data = f"{business_name}_{website}_{phone}_{city}"
+        return hashlib.md5(data.encode()).hexdigest()
+    
+    def qualify_lead(self, lead_data):
+        """Qualify lead using AI"""
+        if not CONFIG["ai_enrichment"]["enabled"] or not self.scraper.openai_client:
+            return lead_data
+        
+        try:
+            prompt = f"""
+            Analyze this business lead and provide:
+            1. Lead score (0-100)
+            2. Quality tier (Premium, High, Medium, Low, Unknown)
+            3. Business type (LLC, Corporation, Sole Proprietorship, Partnership)
+            4. Key services (comma-separated)
+            5. AI notes with insights
+            
+            Lead Information:
+            - Business: {lead_data.get('business_name', 'Unknown')}
+            - Website: {lead_data.get('website', 'None')}
+            - Phone: {lead_data.get('phone', 'None')}
+            - Email: {lead_data.get('email', 'None')}
+            - Address: {lead_data.get('address', 'None')}
+            - City: {lead_data.get('city', 'Unknown')}
+            - Industry: {lead_data.get('industry', 'Unknown')}
+            - Description: {lead_data.get('description', 'None')}
+            
+            Respond in JSON format:
+            {{
+                "lead_score": 0-100,
+                "quality_tier": "Premium/High/Medium/Low/Unknown",
+                "business_type": "LLC/Corporation/Sole Proprietorship/Partnership",
+                "services": ["service1", "service2"],
+                "ai_notes": "Your analysis here"
+            }}
+            """
+            
+            response = self.scraper.openai_client.chat.completions.create(
+                model=CONFIG["ai_enrichment"]["model"],
+                messages=[
+                    {"role": "system", "content": "You are a lead qualification expert for construction and home services businesses."},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=CONFIG["ai_enrichment"]["max_tokens"],
+                temperature=0.3
+            )
+            
+            ai_response = response.choices[0].message.content
+            
+            # Parse JSON response
+            try:
+                ai_data = json.loads(ai_response)
+                
+                # Update lead data
+                lead_data['lead_score'] = ai_data.get('lead_score', 50)
+                lead_data['quality_tier'] = ai_data.get('quality_tier', 'Unknown')
+                lead_data['business_type'] = ai_data.get('business_type', 'LLC')
+                
+                # Merge services
+                existing_services = lead_data.get('services', [])
+                ai_services = ai_data.get('services', [])
+                if isinstance(existing_services, str):
+                    existing_services = [existing_services]
+                if isinstance(ai_services, list):
+                    lead_data['services'] = list(set(existing_services + ai_services))
+                
+                lead_data['ai_notes'] = ai_data.get('ai_notes', '')
+                
+            except:
+                logger.log("Failed to parse AI response", "WARNING")
+        
+        except Exception as e:
+            logger.log(f"AI qualification error: {e}", "WARNING")
+        
+        return lead_data
+    
+    def process_lead(self, search_result, meta_info):
+        """Process a single search result into a lead"""
+        url = search_result.get('link', '')
+        
+        # Skip blacklisted domains
+        if self.is_blacklisted(url):
+            return None
+        
+        # Scrape website
+        scraped_data = self.scraper.scrape_website(url)
+        if not scraped_data:
+            return None
+        
+        # Create lead object
+        lead_data = {
+            'business_name': scraped_data.get('business_name', search_result.get('title', 'Unknown Business')),
+            'website': url,
+            'phone': scraped_data.get('phones', [''])[0] if scraped_data.get('phones') else '',
+            'email': scraped_data.get('emails', [''])[0] if scraped_data.get('emails') else '',
+            'address': scraped_data.get('address', ''),
+            'city': meta_info.get('city', ''),
+            'state': meta_info.get('state', CONFIG['state']),
+            'industry': meta_info.get('industry', ''),
+            'description': scraped_data.get('description', search_result.get('snippet', ''))[:500],
+            'social_media': scraped_data.get('social_media', {}),
+            'services': scraped_data.get('services', []),
+            'scraped_date': datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Generate fingerprint
+        fingerprint = self.generate_fingerprint(
+            lead_data['business_name'],
+            lead_data['website'],
+            lead_data['phone'],
+            lead_data['city']
+        )
+        lead_data['fingerprint'] = fingerprint
+        
+        # Apply filters
+        if not self.passes_filters(lead_data):
+            return None
+        
+        # AI qualification
+        lead_data = self.qualify_lead(lead_data)
+        
+        return lead_data
+    
+    def passes_filters(self, lead_data):
+        """Check if lead passes all filters"""
+        filters = CONFIG["filters"]
+        
+        # Exclude without website
+        if filters["exclude_without_websites"] and not lead_data.get('website'):
+            return False
+        
+        # Exclude without phone
+        if filters["exclude_without_phone"] and not lead_data.get('phone'):
+            return False
+        
+        # Check for chain/franchise keywords
+        business_name = lead_data.get('business_name', '').lower()
+        description = lead_data.get('description', '').lower()
+        
+        for keyword in filters["exclude_keywords"]:
+            if keyword.lower() in business_name or keyword.lower() in description:
+                return False
+        
+        return True
+    
+    def run_cycle(self):
+        """Run one scraping cycle"""
+        if not self.running:
+            return
+        
+        logger.log(f"🚀 Starting scraping cycle {self.stats['cycles'] + 1}", "INFO")
+        
+        queries = self.generate_search_queries()
+        leads_found = 0
+        
+        for query_info in queries:
+            if self.paused or not self.running:
+                break
+            
+            query = query_info['query']
+            logger.log(f"🔍 Searching: {query}", "INFO")
+            
+            results = self.search_serper(query)
+            
+            for result in results:
+                if self.paused or not self.running:
+                    break
+                
+                lead_data = self.process_lead(result, query_info)
+                if lead_data:
+                    # Save to CRM
+                    if CONFIG["crm"]["enabled"] and CONFIG["crm"]["auto_sync"]:
+                        result = self.crm.save_lead(lead_data)
+                        if result["success"]:
+                            leads_found += 1
+                            logger.log(f"✅ Saved lead: {lead_data['business_name']}", "SUCCESS")
+                    
+                    # Also save to JSON file
+                    self.save_lead_to_file(lead_data)
+            
+            # Small delay between searches
+            time.sleep(random.uniform(1, 3))
+        
+        self.stats['cycles'] += 1
+        self.stats['total_leads'] += leads_found
+        self.stats['last_cycle'] = datetime.now().isoformat()
+        
+        logger.log(f"✅ Cycle completed. Found {leads_found} new leads. Total cycles: {self.stats['cycles']}", "SUCCESS")
+    
+    def save_lead_to_file(self, lead_data):
+        """Save lead to JSON file"""
+        try:
+            leads_file = CONFIG["storage"]["leads_file"]
+            leads = []
+            
+            if os.path.exists(leads_file):
+                with open(leads_file, 'r') as f:
+                    leads = json.load(f)
+            
+            leads.append(lead_data)
+            
+            # Keep only last 1000 leads
+            if len(leads) > 1000:
+                leads = leads[-1000:]
+            
+            with open(leads_file, 'w') as f:
+                json.dump(leads, f, indent=2)
+            
+            # Separate qualified leads
+            if lead_data.get('lead_score', 0) >= CONFIG["ai_enrichment"]["qualification_threshold"]:
+                qualified_file = CONFIG["storage"]["qualified_leads"]
+                qualified = []
+                
+                if os.path.exists(qualified_file):
+                    with open(qualified_file, 'r') as f:
+                        qualified = json.load(f)
+                
+                qualified.append(lead_data)
+                
+                if len(qualified) > 500:
+                    qualified = qualified[-500:]
+                
+                with open(qualified_file, 'w') as f:
+                    json.dump(qualified, f, indent=2)
+                
+                # Premium leads (score >= 80)
+                if lead_data.get('lead_score', 0) >= 80:
+                    premium_file = CONFIG["storage"]["premium_leads"]
+                    premium = []
+                    
+                    if os.path.exists(premium_file):
+                        with open(premium_file, 'r') as f:
+                            premium = json.load(f)
+                    
+                    premium.append(lead_data)
+                    
+                    if len(premium) > 100:
+                        premium = premium[-100:]
+                    
+                    with open(premium_file, 'w') as f:
+                        json.dump(premium, f, indent=2)
+        
+        except Exception as e:
+            logger.log(f"Error saving lead to file: {e}", "WARNING")
 
 # ============================================================================
-# PREMIUM STREAMLIT DASHBOARD - COMPLETELY REVAMPED
+# STREAMLIT DASHBOARD
 # ============================================================================
 
-class PremiumDashboard:
-    """Premium Streamlit-based dashboard for Mitz Leads CRM"""
+class StreamlitDashboard:
+    """Streamlit-based dashboard for Lead Scraper CRM"""
     
     def __init__(self):
         if not STREAMLIT_AVAILABLE:
             self.enabled = False
-            print("⚠️  Streamlit not installed. Dashboard disabled.")
+            logger.log("⚠️  Streamlit not installed. Dashboard disabled.", "WARNING")
             return
         
         try:
             self.crm = CRM_Database()
             self.scraper = None
+            self.scraper_running = False
             self.scraper_thread = None
             self.enabled = True
             
             # Configure Streamlit page
             st.set_page_config(
-                page_title="Mitz Leads CRM",
+                page_title="LeadScraper CRM",
                 page_icon="🚀",
                 layout="wide",
                 initial_sidebar_state="expanded"
             )
             
-            # Load custom CSS
-            self.setup_premium_css()
+            # Custom CSS
+            self.setup_custom_css()
             
-            # Initialize session state
-            self.initialize_session_state()
-            
+            logger.log("✅ Streamlit dashboard initialized", "SUCCESS")
         except Exception as e:
             self.enabled = False
-            print(f"Dashboard initialization error: {e}")
+            logger.log(f"Streamlit dashboard initialization error: {e}", "ERROR")
     
-    def initialize_session_state(self):
-        """Initialize all session state variables"""
-        if 'scraper_running' not in st.session_state:
-            # Load scraper state from database
-            conn = self.crm.get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT is_running FROM scraper_state WHERE id = 1")
-            result = cursor.fetchone()
-            conn.close()
-            
-            st.session_state.scraper_running = bool(result[0]) if result else False
-        
-        if 'scraper_stats' not in st.session_state:
-            st.session_state.scraper_stats = {
-                'cycles': 0,
-                'total_leads': 0,
-                'last_cycle': None
-            }
-        
-        if 'current_page' not in st.session_state:
-            st.session_state.current_page = "Dashboard"
-        
-        if 'selected_lead_id' not in st.session_state:
-            st.session_state.selected_lead_id = None
-    
-    def save_scraper_state(self, is_running):
-        """Save scraper state to database"""
-        conn = self.crm.get_connection()
-        cursor = conn.cursor()
-        
-        if is_running:
-            cursor.execute('''
-                UPDATE scraper_state 
-                SET is_running = 1, last_started = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-                WHERE id = 1
-            ''')
-        else:
-            cursor.execute('''
-                UPDATE scraper_state 
-                SET is_running = 0, last_stopped = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
-                WHERE id = 1
-            ''')
-        
-        conn.commit()
-        conn.close()
-    
-    def setup_premium_css(self):
-        """Setup premium CSS styling"""
+    def setup_custom_css(self):
+        """Setup custom CSS for Streamlit"""
         st.markdown("""
         <style>
-        /* Main theme variables */
+        /* Main theme colors */
         :root {
-            --primary: #1a56db;
-            --primary-dark: #1e429f;
-            --primary-light: #3f83f8;
-            --secondary: #7e3af2;
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
             --accent: #f59e0b;
-            --success: #0e9f6e;
-            --success-light: #84e1bc;
-            --danger: #f05252;
-            --warning: #faca15;
+            --success: #10b981;
+            --danger: #ef4444;
             --dark: #111827;
-            --dark-light: #1f2937;
-            --light: #f8fafc;
-            --light-dark: #e5e7eb;
-            --card-bg: #ffffff;
-            --text-dark: #1f2937;
-            --text-light: #6b7280;
-            --border: #e5e7eb;
-            --radius: 12px;
-            --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            --light: #f9fafb;
         }
         
         /* Main container */
-        .stApp {
-            background: linear-gradient(135deg, #f8fafc 0%, #e5e7eb 100%);
-        }
-        
         .main .block-container {
-            padding-top: 1rem;
-            padding-bottom: 1rem;
-            max-width: 100%;
-        }
-        
-        /* Premium Cards */
-        .premium-card {
-            background: var(--card-bg);
-            border-radius: var(--radius);
-            padding: 1.5rem;
-            margin-bottom: 1rem;
-            border: 1px solid var(--border);
-            box-shadow: var(--shadow);
-            transition: all 0.3s ease;
-        }
-        
-        .premium-card:hover {
-            box-shadow: var(--shadow-lg);
-            transform: translateY(-2px);
-        }
-        
-        /* Premium Metrics */
-        .metric-card {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            border-radius: var(--radius);
-            padding: 1.5rem;
-            color: white;
-            text-align: center;
-            box-shadow: var(--shadow);
-        }
-        
-        .metric-card h3 {
-            color: rgba(255, 255, 255, 0.9);
-            font-size: 0.9rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 0.5rem;
-        }
-        
-        .metric-card .value {
-            font-size: 2rem;
-            font-weight: 700;
-            margin: 0;
-            line-height: 1;
-        }
-        
-        .metric-card .delta {
-            font-size: 0.875rem;
-            opacity: 0.9;
-            margin-top: 0.5rem;
-        }
-        
-        /* Premium Buttons */
-        .stButton > button {
-            border-radius: 8px;
-            font-weight: 600;
-            padding: 0.5rem 1.5rem;
-            transition: all 0.3s ease;
-            border: none;
-        }
-        
-        .stButton > button:hover {
-            transform: translateY(-1px);
-            box-shadow: var(--shadow-lg);
-        }
-        
-        /* Primary button */
-        .stButton > button[kind="primary"] {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white;
-        }
-        
-        .stButton > button[kind="primary"]:hover {
-            background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary) 100%);
-        }
-        
-        /* Secondary button */
-        .stButton > button[kind="secondary"] {
-            background: white;
-            color: var(--primary);
-            border: 2px solid var(--primary);
-        }
-        
-        .stButton > button[kind="secondary"]:hover {
-            background: var(--primary);
-            color: white;
-        }
-        
-        /* Sidebar styling */
-        section[data-testid="stSidebar"] {
-            background: linear-gradient(180deg, var(--dark) 0%, var(--dark-light) 100%);
-            border-right: none;
-        }
-        
-        section[data-testid="stSidebar"] > div {
             padding-top: 2rem;
+            padding-bottom: 2rem;
         }
         
-        /* Logo area */
-        .logo-container {
-            text-align: center;
-            padding: 2rem 1rem;
-            margin-bottom: 2rem;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        /* Cards */
+        .card {
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            background: rgba(255, 255, 255, 0.05);
+            margin-bottom: 1rem;
         }
         
-        .logo-container h1 {
-            color: white;
-            font-size: 1.75rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-            background: linear-gradient(135deg, var(--primary-light) 0%, var(--accent) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        
-        .logo-container p {
-            color: rgba(255, 255, 255, 0.7);
-            font-size: 0.875rem;
-            margin: 0;
-        }
-        
-        /* Navigation items */
-        .nav-item {
-            padding: 0.75rem 1.5rem;
-            margin: 0.25rem 0;
-            border-radius: 8px;
-            color: rgba(255, 255, 255, 0.8);
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-        
-        .nav-item:hover {
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            transform: translateX(5px);
-        }
-        
-        .nav-item.active {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            color: white;
-            box-shadow: var(--shadow);
-        }
-        
-        .nav-item .icon {
-            font-size: 1.25rem;
-        }
-        
-        /* Status indicators */
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        
-        .status-active {
-            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
-            color: white;
-        }
-        
-        .status-inactive {
-            background: linear-gradient(135deg, var(--danger) 0%, #dc2626 100%);
-            color: white;
-        }
-        
-        .status-running {
-            background: linear-gradient(135deg, var(--accent) 0%, #d97706 100%);
-            color: white;
+        /* Headers */
+        h1, h2, h3 {
+            color: var(--light) !important;
         }
         
         /* Badges */
         .badge {
             display: inline-block;
             padding: 0.25rem 0.75rem;
-            border-radius: 20px;
+            border-radius: 9999px;
             font-size: 0.75rem;
             font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
         }
         
         .badge-premium {
-            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            background: linear-gradient(135deg, #f59e0b, #d97706);
             color: white;
         }
         
         .badge-high {
-            background: linear-gradient(135deg, var(--success) 0%, #059669 100%);
+            background: linear-gradient(135deg, #10b981, #059669);
             color: white;
         }
         
         .badge-medium {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
             color: white;
         }
         
         .badge-low {
-            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            background: linear-gradient(135deg, #6b7280, #4b5563);
             color: white;
         }
         
-        /* Tables */
-        .dataframe {
-            border: none !important;
-            border-radius: var(--radius) !important;
-            overflow: hidden !important;
-            box-shadow: var(--shadow) !important;
+        /* Status indicators */
+        .status-active {
+            color: var(--success);
+            font-weight: 600;
         }
         
-        .dataframe thead {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%) !important;
+        .status-inactive {
+            color: var(--danger);
+            font-weight: 600;
+        }
+        
+        .status-warning {
+            color: var(--accent);
+            font-weight: 600;
+        }
+        
+        /* DataTables */
+        .dataframe {
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 0.5rem !important;
         }
         
         .dataframe th {
+            background: rgba(37, 99, 235, 0.2) !important;
             color: white !important;
             font-weight: 600 !important;
-            border: none !important;
-            padding: 1rem !important;
         }
         
         .dataframe td {
-            border: none !important;
-            padding: 0.75rem 1rem !important;
-            border-bottom: 1px solid var(--border) !important;
+            border-color: rgba(255, 255, 255, 0.1) !important;
         }
         
-        .dataframe tr:hover {
-            background: rgba(26, 86, 219, 0.05) !important;
+        /* Metrics */
+        .metric-card {
+            background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(30, 64, 175, 0.1) 100%);
+            border-left: 4px solid var(--primary);
+            border-radius: 0.5rem;
+            padding: 1rem;
         }
         
         /* Tabs */
-        .stTabs {
-            margin-top: 1rem;
-        }
-        
         .stTabs [data-baseweb="tab-list"] {
-            gap: 1rem;
-            border-bottom: 1px solid var(--border);
+            gap: 2rem;
         }
         
         .stTabs [data-baseweb="tab"] {
-            padding: 1rem 2rem;
-            border-radius: var(--radius) var(--radius) 0 0;
-            font-weight: 600;
-            color: var(--text-light);
-            transition: all 0.3s ease;
+            height: 50px;
+            white-space: pre-wrap;
+            border-radius: 0.5rem 0.5rem 0 0;
+            gap: 1rem;
+            padding: 1rem;
         }
         
-        .stTabs [aria-selected="true"] {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-            color: white !important;
+        /* Sidebar */
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(180deg, var(--dark) 0%, #1f2937 100%);
         }
         
-        /* Input fields */
-        .stTextInput > div > div {
-            border-radius: 8px;
-            border: 1px solid var(--border);
-        }
-        
-        .stTextInput > div > div:focus-within {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 2px rgba(26, 86, 219, 0.1);
-        }
-        
-        .stSelectbox > div > div {
-            border-radius: 8px;
-            border: 1px solid var(--border);
-        }
-        
-        /* Progress bar */
-        .stProgress > div > div > div {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-        }
-        
-        /* Hide Streamlit elements */
+        /* Hide Streamlit branding */
         #MainMenu {visibility: hidden;}
         footer {visibility: hidden;}
         header {visibility: hidden;}
-        .stDeployButton {display: none;}
-        
-        /* Custom scrollbar */
-        ::-webkit-scrollbar {
-            width: 6px;
-            height: 6px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 3px;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
-            border-radius: 3px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--secondary) 100%);
-        }
-        
-        /* Tooltips */
-        .tooltip {
-            position: relative;
-            display: inline-block;
-        }
-        
-        .tooltip .tooltiptext {
-            visibility: hidden;
-            width: 200px;
-            background-color: var(--dark);
-            color: white;
-            text-align: center;
-            border-radius: 6px;
-            padding: 0.5rem;
-            position: absolute;
-            z-index: 1;
-            bottom: 125%;
-            left: 50%;
-            transform: translateX(-50%);
-            opacity: 0;
-            transition: opacity 0.3s;
-            font-size: 0.875rem;
-            box-shadow: var(--shadow-lg);
-        }
-        
-        .tooltip:hover .tooltiptext {
-            visibility: visible;
-            opacity: 1;
-        }
         </style>
         """, unsafe_allow_html=True)
     
-    def render_premium_sidebar(self):
-        """Render premium sidebar"""
-        with st.sidebar:
-            # Logo and Title
-            st.markdown("""
-            <div class="logo-container">
-                <h1>🚀 MITZ LEADS CRM</h1>
-                <p>Premium Lead Generation & Management</p>
-                <p style="font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin-top: 0.5rem;">
-                    v6.0 • Professional Edition
-                </p>
-            </div>
-            """, unsafe_allow_html=True)
+    def run_scraper_background(self):
+        """Run scraper in background"""
+        try:
+            self.scraper = ModernLeadScraper()
+            self.scraper.running = True
+            self.scraper.paused = False
             
-            # Navigation Menu
-            st.markdown("""
-            <div style="padding: 0 1rem;">
-                <h3 style="color: rgba(255, 255, 255, 0.9); font-size: 0.875rem; text-transform: uppercase; 
-                           letter-spacing: 1px; margin-bottom: 1rem; opacity: 0.7;">
-                    📊 Navigation
-                </h3>
-            </div>
-            """, unsafe_allow_html=True)
+            cycles = 0
+            while self.scraper_running and cycles < CONFIG['max_cycles']:
+                if not self.scraper.running:
+                    break
+                
+                self.scraper.run_cycle()
+                cycles += 1
+                
+                # Update session state
+                if 'scraper_stats' not in st.session_state:
+                    st.session_state.scraper_stats = {}
+                
+                st.session_state.scraper_stats = {
+                    'cycles': cycles,
+                    'total_leads': self.scraper.stats['total_leads'],
+                    'last_cycle': self.scraper.stats['last_cycle']
+                }
+                
+                # Check if we should continue
+                if self.scraper_running and cycles < CONFIG['max_cycles']:
+                    time.sleep(CONFIG['cycle_interval'])
             
-            # Navigation Items
-            nav_items = [
-                {"icon": "📊", "label": "Dashboard", "page": "Dashboard"},
-                {"icon": "👥", "label": "Leads", "page": "Leads"},
-                {"icon": "📋", "label": "Lead Details", "page": "Lead Details"},
-                {"icon": "⚙️", "label": "Settings", "page": "Settings"},
-                {"icon": "📈", "label": "Analytics", "page": "Analytics"},
-                {"icon": "📋", "label": "Logs", "page": "Logs"},
-                {"icon": "📤", "label": "Export", "page": "Export"}
-            ]
+            self.scraper_running = False
+            logger.log("Scraper finished", "INFO")
             
-            for item in nav_items:
-                active_class = "active" if st.session_state.current_page == item["page"] else ""
-                st.markdown(f"""
-                <div class="nav-item {active_class}" onclick="window.parent.setPage('{item['page']}')">
-                    <span class="icon">{item['icon']}</span>
-                    <span>{item['label']}</span>
-                </div>
-                """, unsafe_allow_html=True)
+            # Update session state
+            st.session_state.scraper_running = False
             
-            st.markdown("---")
-            
-            # Scraper Control Section
-            st.markdown("""
-            <div style="padding: 0 1rem;">
-                <h3 style="color: rgba(255, 255, 255, 0.9); font-size: 0.875rem; text-transform: uppercase; 
-                           letter-spacing: 1px; margin-bottom: 1rem; opacity: 0.7;">
-                    ⚙️ Scraper Control
-                </h3>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Status Display
-            status_text = "🟢 ACTIVE" if st.session_state.scraper_running else "🔴 INACTIVE"
-            status_class = "status-active" if st.session_state.scraper_running else "status-inactive"
-            
-            st.markdown(f"""
-            <div style="padding: 0 1rem; margin-bottom: 1rem;">
-                <div class="status-badge {status_class}" style="justify-content: center;">
-                    <span class="icon">{'▶️' if st.session_state.scraper_running else '⏸️'}</span>
-                    <span>{status_text}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Control Buttons
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("▶️ Start", use_container_width=True, type="primary", 
-                           help="Start the lead scraper"):
-                    if self.start_scraper():
-                        st.success("✅ Scraper started successfully!")
-                        self.save_scraper_state(True)
-                        st.rerun()
-            
-            with col2:
-                if st.button("⏹️ Stop", use_container_width=True, type="secondary",
-                           help="Stop the lead scraper"):
-                    if self.stop_scraper():
-                        st.info("⏹️ Scraper stopped")
-                        self.save_scraper_state(False)
-                        st.rerun()
-            
-            # Quick Stats
-            st.markdown("---")
-            st.markdown("""
-            <div style="padding: 0 1rem;">
-                <h3 style="color: rgba(255, 255, 255, 0.9); font-size: 0.875rem; text-transform: uppercase; 
-                           letter-spacing: 1px; margin-bottom: 1rem; opacity: 0.7;">
-                    📈 Quick Stats
-                </h3>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            # Get stats
-            today_count = self.crm.get_today_count()
-            total_leads = self.crm.get_leads()["total"]
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown(f"""
-                <div class="metric-card" style="padding: 0.75rem;">
-                    <h3>Today</h3>
-                    <div class="value" style="font-size: 1.5rem;">{today_count}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            with col2:
-                st.markdown(f"""
-                <div class="metric-card" style="padding: 0.75rem;">
-                    <h3>Total</h3>
-                    <div class="value" style="font-size: 1.5rem;">{total_leads}</div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # System Info
-            st.markdown("---")
-            st.markdown("""
-            <div style="padding: 0 1rem;">
-                <h3 style="color: rgba(255, 255, 255, 0.9); font-size: 0.875rem; text-transform: uppercase; 
-                           letter-spacing: 1px; margin-bottom: 1rem; opacity: 0.7;">
-                    💻 System Info
-                </h3>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            info_items = [
-                ("Database", "✅ Connected" if self.crm.conn else "❌ Error"),
-                ("AI Enabled", "✅ Ready" if OPENAI_AVAILABLE and CONFIG.get('openai_api_key', '').startswith('sk-') else "❌ Disabled"),
-                ("State", CONFIG['state']),
-                ("Cities", str(len(CONFIG['cities']))),
-                ("Industries", str(len(CONFIG['industries'])))
-            ]
-            
-            for label, value in info_items:
-                st.markdown(f"""
-                <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; color: rgba(255, 255, 255, 0.8);">
-                    <span style="font-size: 0.875rem;">{label}:</span>
-                    <span style="font-weight: 600; color: rgba(255, 255, 255, 0.9);">{value}</span>
-                </div>
-                """, unsafe_allow_html=True)
+        except Exception as e:
+            logger.log(f"Background scraper error: {e}", "ERROR")
+            self.scraper_running = False
+            st.session_state.scraper_running = False
     
     def start_scraper(self):
         """Start the scraper"""
-        if not st.session_state.scraper_running:
+        if not self.scraper_running:
+            self.scraper_running = True
             st.session_state.scraper_running = True
-            # Note: In a real implementation, you'd start the scraper thread here
+            self.scraper_thread = threading.Thread(target=self.run_scraper_background, daemon=True)
+            self.scraper_thread.start()
             return True
         return False
     
     def stop_scraper(self):
         """Stop the scraper"""
-        if st.session_state.scraper_running:
-            st.session_state.scraper_running = False
-            return True
-        return False
+        self.scraper_running = False
+        if self.scraper:
+            self.scraper.running = False
+        st.session_state.scraper_running = False
+        return True
     
-    def render_dashboard(self):
-        """Render premium dashboard"""
-        # Header
-        col1, col2 = st.columns([3, 1])
-        with col1:
+    def render_sidebar(self):
+        """Render the sidebar"""
+        with st.sidebar:
             st.markdown("""
-            <h1 style="color: var(--text-dark); margin-bottom: 0.5rem;">
-                📊 Dashboard Overview
-            </h1>
-            <p style="color: var(--text-light); font-size: 1rem; margin-bottom: 2rem;">
-                Real-time insights and lead analytics
-            </p>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div style="text-align: right; margin-top: 1rem;">
-                <div class="status-badge {'status-active' if st.session_state.scraper_running else 'status-inactive'}" 
-                     style="display: inline-flex; padding: 0.5rem 1rem;">
-                    <span class="icon">{'▶️' if st.session_state.scraper_running else '⏸️'}</span>
-                    <span>{'ACTIVE' if st.session_state.scraper_running else 'INACTIVE'}</span>
-                </div>
+            <div style="text-align: center; margin-bottom: 2rem;">
+                <h1 style="color: #2563eb; font-size: 2rem; margin-bottom: 0.5rem;">🚀 LeadScraper</h1>
+                <p style="color: #9ca3af; font-size: 0.875rem;">v5.0 - Streamlit Edition</p>
             </div>
             """, unsafe_allow_html=True)
+            
+            # Navigation
+            st.markdown("### 📊 Navigation")
+            page = st.radio(
+                "Select Page",
+                ["Dashboard", "Leads", "Lead Details", "Settings", "Logs", "Export"],
+                label_visibility="collapsed"
+            )
+            
+            st.markdown("---")
+            
+            # Scraper Control
+            st.markdown("### ⚙️ Scraper Control")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("▶️ Start", use_container_width=True, type="primary"):
+                    if self.start_scraper():
+                        st.success("Scraper started!")
+                        st.rerun()
+            
+            with col2:
+                if st.button("⏹️ Stop", use_container_width=True, type="secondary"):
+                    if self.stop_scraper():
+                        st.info("Scraper stopped!")
+                        st.rerun()
+            
+            # Scraper Status
+            status = "🟢 Active" if st.session_state.get('scraper_running', False) else "🔴 Inactive"
+            st.markdown(f"**Status:** {status}")
+            
+            if 'scraper_stats' in st.session_state:
+                stats = st.session_state.scraper_stats
+                st.markdown(f"**Cycles:** {stats.get('cycles', 0)}")
+                st.markdown(f"**Total Leads:** {stats.get('total_leads', 0)}")
+            
+            st.markdown("---")
+            
+            # Quick Stats
+            st.markdown("### 📈 Quick Stats")
+            today_count = self.crm.get_today_count()
+            total_leads = self.crm.get_leads()["total"]
+            
+            st.metric("Today's Leads", today_count)
+            st.metric("Total Leads", total_leads)
+            
+            st.markdown("---")
+            
+            # System Info
+            st.markdown("### 💻 System Info")
+            st.markdown(f"**Database:** {'✅ Connected' if self.crm.conn else '❌ Error'}")
+            st.markdown(f"**AI Enabled:** {'✅ Ready' if OPENAI_AVAILABLE and CONFIG.get('openai_api_key', '').startswith('sk-') else '❌ Disabled'}")
+            st.markdown(f"**State:** {CONFIG['state']}")
+            st.markdown(f"**Cities:** {len(CONFIG['cities'])}")
+            st.markdown(f"**Industries:** {len(CONFIG['industries'])}")
         
-        # Top Metrics Row
-        st.markdown("""
-        <div style="margin-bottom: 2rem;">
-            <h3 style="color: var(--text-dark); font-size: 1.1rem; margin-bottom: 1rem;">
-                📈 Key Performance Indicators
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
+        return page
+    
+    def render_dashboard(self):
+        """Render the main dashboard"""
+        st.title("📊 Dashboard Overview")
         
         # Get statistics
         stats = self.crm.get_statistics()
         
-        # Create metric cards
+        # Top Metrics
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>Total Leads</h3>
-                <div class="value">{stats["overall"]["total_leads"]:,}</div>
-                <div class="delta">All time</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.metric("Total Leads", stats["overall"]["total_leads"])
         
         with col2:
-            st.markdown(f"""
-            <div class="metric-card" style="background: linear-gradient(135deg, var(--success) 0%, #059669 100%);">
-                <h3>Estimated Value</h3>
-                <div class="value">${stats["overall"]["total_value"]:,}</div>
-                <div class="delta">Total potential</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.metric("Estimated Value", f"${stats['overall']['total_value']:,}")
         
         with col3:
-            avg_score = stats["overall"]["avg_score"]
-            score_color = "var(--success)" if avg_score >= 70 else "var(--warning)" if avg_score >= 40 else "var(--danger)"
-            st.markdown(f"""
-            <div class="metric-card" style="background: linear-gradient(135deg, {score_color} 0%, var(--primary-dark) 100%);">
-                <h3>Average Score</h3>
-                <div class="value">{avg_score:.1f}</div>
-                <div class="delta">Lead quality</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.metric("Average Score", f"{stats['overall']['avg_score']:.1f}")
         
         with col4:
-            st.markdown(f"""
-            <div class="metric-card" style="background: linear-gradient(135deg, var(--accent) 0%, #d97706 100%);">
-                <h3>Closed Won</h3>
-                <div class="value">{stats["overall"]["closed_won"]}</div>
-                <div class="delta">Successful deals</div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.metric("Closed Won", stats["overall"]["closed_won"])
         
-        # Charts Section
-        st.markdown("""
-        <div style="margin: 2rem 0;">
-            <h3 style="color: var(--text-dark); font-size: 1.1rem; margin-bottom: 1rem;">
-                📊 Lead Analytics
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        # Charts Row
         col1, col2 = st.columns(2)
         
         with col1:
             # Quality Distribution
-            st.markdown("""
-            <div class="premium-card">
-                <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Lead Quality Distribution</h4>
-            """, unsafe_allow_html=True)
-            
             quality_data = stats["quality_distribution"]
             if quality_data:
                 df_quality = pd.DataFrame(quality_data)
@@ -1222,77 +1980,64 @@ class PremiumDashboard:
                     df_quality, 
                     values='count', 
                     names='tier',
+                    title='Lead Quality Distribution',
                     color='tier',
                     color_discrete_map={
                         'Premium': '#f59e0b',
-                        'High': '#0e9f6e',
-                        'Medium': '#1a56db',
+                        'High': '#10b981',
+                        'Medium': '#3b82f6',
                         'Low': '#6b7280'
-                    },
-                    hole=0.4
-                )
-                fig_quality.update_layout(
-                    showlegend=True,
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    margin=dict(t=0, b=0, l=0, r=0)
+                    }
                 )
                 st.plotly_chart(fig_quality, use_container_width=True)
-            else:
-                st.info("No quality data available")
-            
-            st.markdown("</div>", unsafe_allow_html=True)
         
         with col2:
             # Status Distribution
-            st.markdown("""
-            <div class="premium-card">
-                <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Lead Status Distribution</h4>
-            """, unsafe_allow_html=True)
-            
-            status_data = stats["status_distribution"][:8]
+            status_data = stats["status_distribution"][:8]  # Top 8 statuses
             if status_data:
                 df_status = pd.DataFrame(status_data)
                 fig_status = px.bar(
                     df_status,
                     x='status',
                     y='count',
+                    title='Lead Status Distribution',
                     color='count',
                     color_continuous_scale='blues'
                 )
-                fig_status.update_layout(
-                    plot_bgcolor='rgba(0,0,0,0)',
-                    paper_bgcolor='rgba(0,0,0,0)',
-                    xaxis_tickangle=-45,
-                    margin=dict(t=0, b=0, l=0, r=0)
-                )
+                fig_status.update_layout(xaxis_tickangle=-45)
                 st.plotly_chart(fig_status, use_container_width=True)
-            else:
-                st.info("No status data available")
+        
+        # Daily Leads Chart
+        st.subheader("📅 Daily Leads (Last 30 Days)")
+        daily_data = stats["daily_leads"]
+        if daily_data:
+            df_daily = pd.DataFrame(daily_data)
+            df_daily['date'] = pd.to_datetime(df_daily['date'])
+            df_daily = df_daily.sort_values('date')
             
-            st.markdown("</div>", unsafe_allow_html=True)
+            fig_daily = px.line(
+                df_daily,
+                x='date',
+                y='count',
+                title='Daily Lead Acquisition',
+                markers=True
+            )
+            st.plotly_chart(fig_daily, use_container_width=True)
         
         # Recent Leads
-        st.markdown("""
-        <div style="margin: 2rem 0;">
-            <h3 style="color: var(--text-dark); font-size: 1.1rem; margin-bottom: 1rem;">
-                🆕 Recent Leads
-            </h3>
-        </div>
-        """, unsafe_allow_html=True)
-        
+        st.subheader("🆕 Recent Leads")
         leads_data = self.crm.get_leads(page=1, per_page=10)
         
         if leads_data["leads"]:
             df_recent = pd.DataFrame(leads_data["leads"])
             
-            # Select columns
+            # Select and rename columns for display
             display_cols = ['business_name', 'city', 'industry', 'lead_score', 'quality_tier', 'lead_status']
             df_display = df_recent[display_cols].copy()
             df_display.columns = ['Business', 'City', 'Industry', 'Score', 'Quality', 'Status']
             
-            # Format Quality column
-            def format_quality(tier):
+            # Format the dataframe
+            def format_quality_tier(tier):
                 color_map = {
                     'Premium': 'badge-premium',
                     'High': 'badge-high',
@@ -1301,47 +2046,16 @@ class PremiumDashboard:
                 }
                 return f'<span class="{color_map.get(tier, "badge-low")}">{tier}</span>'
             
-            # Format Score column
-            def format_score(score):
-                color = "#0e9f6e" if score >= 70 else "#f59e0b" if score >= 40 else "#f05252"
-                return f'<span style="font-weight: 600; color: {color};">{score}</span>'
-            
-            # Apply formatting
-            df_display['Quality'] = df_display['Quality'].apply(format_quality)
-            df_display['Score'] = df_display['Score'].apply(format_score)
-            
-            st.markdown(df_display.to_html(escape=False, index=False, classes='dataframe'), unsafe_allow_html=True)
+            st.markdown(df_display.to_html(escape=False, formatters={'Quality': format_quality_tier}), unsafe_allow_html=True)
         else:
-            st.markdown("""
-            <div class="premium-card">
-                <div style="text-align: center; padding: 3rem;">
-                    <h3 style="color: var(--text-light); margin-bottom: 1rem;">No Leads Found</h3>
-                    <p style="color: var(--text-light); margin-bottom: 1.5rem;">
-                        Start the scraper to collect leads!
-                    </p>
-                    <button onclick="window.parent.startScraper()" 
-                            style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); 
-                                   color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 8px; 
-                                   font-weight: 600; cursor: pointer;">
-                        ▶️ Start Scraper
-                    </button>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            st.info("No leads found. Start the scraper to collect leads!")
     
     def render_leads(self):
         """Render leads management page"""
-        st.markdown("""
-        <h1 style="color: var(--text-dark); margin-bottom: 0.5rem;">
-            👥 Leads Management
-        </h1>
-        <p style="color: var(--text-light); font-size: 1rem; margin-bottom: 2rem;">
-            Manage and organize your lead pipeline
-        </p>
-        """, unsafe_allow_html=True)
+        st.title("👥 Leads Management")
         
-        # Filters in premium card
-        with st.expander("🔍 Advanced Filters", expanded=False):
+        # Filters
+        with st.expander("🔍 Filters", expanded=False):
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
@@ -1371,626 +2085,623 @@ class PremiumDashboard:
         leads_data = self.crm.get_leads(filters=filters, page=1, per_page=50)
         leads = leads_data["leads"]
         
-        # Display results
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown(f"""
-            <div class="metric-card" style="background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); 
-                                           padding: 1rem; margin-bottom: 1rem;">
-                <h3>Leads Found</h3>
-                <div class="value" style="font-size: 2.5rem;">{leads_data["total"]:,}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            if st.button("🔄 Refresh", use_container_width=True):
-                st.rerun()
+        st.metric("Total Leads Found", leads_data["total"])
         
         if leads:
-            # Create beautiful table
+            # Create dataframe
             df = pd.DataFrame(leads)
             
-            # Add action buttons
-            df['Actions'] = df['id'].apply(
-                lambda x: f"""
-                <div style="display: flex; gap: 0.25rem;">
-                    <button onclick="window.parent.viewLead({x})" 
-                            style="background: var(--primary); color: white; border: none; 
-                                   padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; cursor: pointer;">
-                        View
-                    </button>
-                </div>
-                """
-            )
-            
             # Select columns for display
-            display_columns = ['id', 'business_name', 'city', 'lead_score', 'quality_tier', 'lead_status', 'Actions']
-            available_cols = [col for col in display_columns if col in df.columns]
+            display_cols = ['id', 'business_name', 'phone', 'email', 'city', 
+                          'industry', 'lead_score', 'quality_tier', 'lead_status']
             
-            df_display = df[available_cols].copy()
-            df_display.columns = ['ID', 'Business', 'City', 'Score', 'Quality', 'Status', 'Actions']
-            
-            # Format columns
-            def format_score(score):
-                color = "#0e9f6e" if score >= 70 else "#f59e0b" if score >= 40 else "#f05252"
-                return f'<span style="font-weight: 600; color: {color};">{score}</span>'
-            
-            def format_quality(tier):
-                color_map = {
-                    'Premium': 'badge-premium',
-                    'High': 'badge-high',
-                    'Medium': 'badge-medium',
-                    'Low': 'badge-low'
+            if all(col in df.columns for col in display_cols):
+                df_display = df[display_cols].copy()
+                df_display.columns = ['ID', 'Business', 'Phone', 'Email', 'City', 
+                                    'Industry', 'Score', 'Quality', 'Status']
+                
+                # Add action buttons
+                df_display['Actions'] = df_display['ID'].apply(
+                    lambda x: f'<button onclick="viewLead({x})">View</button>'
+                )
+                
+                # Display as HTML table with styling
+                st.markdown("""
+                <style>
+                .dataframe-table {
+                    width: 100%;
+                    border-collapse: collapse;
                 }
-                return f'<span class="{color_map.get(tier, "badge-low")}">{tier}</span>'
-            
-            df_display['Score'] = df_display['Score'].apply(format_score)
-            df_display['Quality'] = df_display['Quality'].apply(format_quality)
-            
-            # Display table
-            st.markdown(df_display.to_html(escape=False, index=False, classes='dataframe'), unsafe_allow_html=True)
-        else:
-            st.info("No leads found with the current filters.")
-    
-    def render_lead_details(self):
-        """Render lead details page"""
-        st.markdown("""
-        <h1 style="color: var(--text-dark); margin-bottom: 0.5rem;">
-            📋 Lead Details
-        </h1>
-        <p style="color: var(--text-light); font-size: 1rem; margin-bottom: 2rem;">
-            View and manage individual lead information
-        </p>
-        """, unsafe_allow_html=True)
-        
-        # Lead selector
-        col1, col2 = st.columns([1, 3])
-        with col1:
-            lead_id = st.number_input("Lead ID", min_value=1, value=1)
-        
-        with col2:
-            if st.button("🔍 Load Lead", type="primary"):
-                st.session_state.selected_lead_id = lead_id
-        
-        # Load and display lead
-        if st.session_state.selected_lead_id:
-            lead = self.crm.get_lead_by_id(st.session_state.selected_lead_id)
-            
-            if lead:
-                # Create tabs for different sections
-                tab1, tab2, tab3, tab4 = st.tabs(["📋 Overview", "📞 Contact", "📊 Status", "📝 Activity"])
+                .dataframe-table th {
+                    background: rgba(37, 99, 235, 0.2);
+                    padding: 12px;
+                    text-align: left;
+                    color: white;
+                    font-weight: 600;
+                }
+                .dataframe-table td {
+                    padding: 12px;
+                    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                }
+                .dataframe-table tr:hover {
+                    background: rgba(255, 255, 255, 0.05);
+                }
+                </style>
+                """, unsafe_allow_html=True)
                 
-                with tab1:
-                    self._render_lead_overview(lead)
+                st.markdown(df_display.to_html(escape=False, index=False, classes='dataframe-table'), unsafe_allow_html=True)
                 
-                with tab2:
-                    self._render_lead_contact(lead)
+                # Lead detail viewer
+                st.subheader("📋 Lead Details")
+                selected_id = st.selectbox("Select Lead ID to View Details", df_display['ID'].tolist())
                 
-                with tab3:
-                    self._render_lead_status(lead)
-                
-                with tab4:
-                    self._render_lead_activity(lead)
+                if selected_id:
+                    lead = self.crm.get_lead_by_id(selected_id)
+                    if lead:
+                        self.render_lead_detail(lead)
             else:
-                st.error("Lead not found!")
-    
-    def _render_lead_overview(self, lead):
-        """Render lead overview tab"""
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            <div class="premium-card">
-                <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Business Information</h4>
-            """, unsafe_allow_html=True)
-            
-            st.text_input("Business Name", lead.get('business_name', ''), disabled=True)
-            st.text_input("Industry", lead.get('industry', ''), disabled=True)
-            st.text_input("Business Type", lead.get('business_type', ''), disabled=True)
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown("""
-            <div class="premium-card">
-                <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Quality & Score</h4>
-            """, unsafe_allow_html=True)
-            
-            # Quality Score Card
-            lead_score = lead.get('lead_score', 0)
-            quality_tier = lead.get('quality_tier', 'Unknown')
-            
-            st.markdown(f"""
-            <div style="text-align: center; padding: 1rem;">
-                <div style="font-size: 3rem; font-weight: 700; color: {'#0e9f6e' if lead_score >= 70 else '#f59e0b' if lead_score >= 40 else '#f05252'};">
-                    {lead_score}
-                </div>
-                <div class="badge {f'badge-{quality_tier.lower()}' if quality_tier in ['Premium', 'High', 'Medium', 'Low'] else 'badge-low'}" 
-                     style="font-size: 1rem; padding: 0.5rem 1rem; margin-top: 0.5rem;">
-                    {quality_tier}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-    
-    def _render_lead_contact(self, lead):
-        """Render lead contact tab"""
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            <div class="premium-card">
-                <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Contact Details</h4>
-            """, unsafe_allow_html=True)
-            
-            website = lead.get('website', '')
-            if website:
-                st.markdown(f"**Website:** [{website}]({website})")
-            
-            phone = lead.get('phone', '')
-            if phone:
-                st.markdown(f"**Phone:** `{phone}`")
-            
-            email = lead.get('email', '')
-            if email:
-                st.markdown(f"**Email:** `{email}`")
-            
-            address = lead.get('address', '')
-            if address:
-                st.text_area("Address", address, disabled=True)
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown("""
-            <div class="premium-card">
-                <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Location</h4>
-            """, unsafe_allow_html=True)
-            
-            st.text_input("City", lead.get('city', ''), disabled=True)
-            st.text_input("State", lead.get('state', ''), disabled=True)
-            
-            # Social Media
-            social_media = lead.get('social_media', {})
-            if social_media and isinstance(social_media, dict):
-                st.subheader("Social Media")
-                for platform, url in social_media.items():
-                    st.markdown(f"**{platform.title()}:** [{url}]({url})")
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-    
-    def _render_lead_status(self, lead):
-        """Render lead status tab"""
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            <div class="premium-card">
-                <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Update Status</h4>
-            """, unsafe_allow_html=True)
-            
-            # Status update form
-            with st.form("update_status_form"):
-                new_status = st.selectbox(
-                    "Status",
-                    CONFIG["lead_management"]["status_options"],
-                    index=CONFIG["lead_management"]["status_options"].index(lead.get('lead_status', 'New Lead')) 
-                    if lead.get('lead_status') in CONFIG["lead_management"]["status_options"] else 0
-                )
-                
-                new_priority = st.selectbox(
-                    "Priority",
-                    CONFIG["lead_management"]["priority_options"],
-                    index=CONFIG["lead_management"]["priority_options"].index(lead.get('outreach_priority', 'Medium')) 
-                    if lead.get('outreach_priority') in CONFIG["lead_management"]["priority_options"] else 2
-                )
-                
-                assigned_to = st.text_input("Assigned To", lead.get('assigned_to', ''))
-                
-                notes = st.text_area("Notes", lead.get('notes', ''), height=100)
-                
-                if st.form_submit_button("💾 Update Lead", use_container_width=True):
-                    update_data = {
-                        'lead_status': new_status,
-                        'outreach_priority': new_priority,
-                        'assigned_to': assigned_to,
-                        'notes': notes
-                    }
-                    result = self.crm.update_lead(lead['id'], update_data)
-                    if result['success']:
-                        st.success("✅ Lead updated successfully!")
-                        st.rerun()
-                    else:
-                        st.error(f"❌ Error: {result['message']}")
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown("""
-            <div class="premium-card">
-                <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Timeline</h4>
-            """, unsafe_allow_html=True)
-            
-            timeline_items = [
-                ("Created", lead.get('created_at', '')),
-                ("Scraped", lead.get('scraped_date', '')),
-                ("Follow-up", lead.get('follow_up_date', '')),
-                ("Last Updated", lead.get('last_updated', ''))
-            ]
-            
-            for label, value in timeline_items:
-                if value:
-                    st.markdown(f"""
-                    <div style="margin-bottom: 0.75rem;">
-                        <div style="font-size: 0.875rem; color: var(--text-light);">{label}</div>
-                        <div style="font-weight: 600; color: var(--text-dark);">{value[:19] if len(value) > 19 else value}</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-    
-    def _render_lead_activity(self, lead):
-        """Render lead activity tab"""
-        st.markdown("""
-        <div class="premium-card">
-            <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Activity Timeline</h4>
-        """, unsafe_allow_html=True)
-        
-        activities = lead.get('activities', [])
-        
-        if activities:
-            for activity in activities[:10]:
-                with st.container():
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.markdown(f"**{activity.get('activity_type', 'Activity')}**")
-                        st.caption(activity.get('activity_details', ''))
-                    with col2:
-                        performed = activity.get('performed_at', '')
-                        if performed:
-                            st.caption(performed[:19])
-                    st.divider()
+                st.warning("Some required columns are missing from the data.")
         else:
-            st.info("No activities recorded yet.")
+            st.info("No leads match the current filters.")
+    
+    def render_lead_detail(self, lead=None, lead_id=None):
+        """Render lead details"""
+        if lead_id and not lead:
+            lead = self.crm.get_lead_by_id(lead_id)
         
-        st.markdown("</div>", unsafe_allow_html=True)
+        if not lead:
+            st.error("Lead not found!")
+            return
+        
+        # Create tabs for different sections
+        tab1, tab2, tab3, tab4 = st.tabs(["📋 Basic Info", "📞 Contact", "📊 Status & Actions", "📝 Activities"])
+        
+        with tab1:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Business Information")
+                st.text_input("Business Name", lead.get('business_name', ''), disabled=True)
+                st.text_input("Industry", lead.get('industry', ''), disabled=True)
+                st.text_input("Business Type", lead.get('business_type', ''), disabled=True)
+                
+                # Quality Score
+                col_score, col_tier = st.columns(2)
+                with col_score:
+                    st.metric("Lead Score", lead.get('lead_score', 0))
+                with col_tier:
+                    tier = lead.get('quality_tier', 'Unknown')
+                    tier_color = {
+                        'Premium': 'badge-premium',
+                        'High': 'badge-high',
+                        'Medium': 'badge-medium',
+                        'Low': 'badge-low'
+                    }.get(tier, 'badge-low')
+                    st.markdown(f"**Quality Tier:** <span class='{tier_color}'>{tier}</span>", unsafe_allow_html=True)
+            
+            with col2:
+                st.subheader("Description & Services")
+                st.text_area("Description", lead.get('description', ''), height=150, disabled=True)
+                
+                # Services
+                services = lead.get('services', [])
+                if isinstance(services, str):
+                    services = [services]
+                
+                if services:
+                    st.markdown("**Services:**")
+                    for service in services[:5]:  # Show first 5 services
+                        st.markdown(f"- {service}")
+        
+        with tab2:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Contact Details")
+                website = lead.get('website', '')
+                if website:
+                    st.markdown(f"**Website:** [{website}]({website})")
+                else:
+                    st.text("Website: Not available")
+                
+                phone = lead.get('phone', '')
+                if phone:
+                    st.markdown(f"**Phone:** {phone}")
+                else:
+                    st.text("Phone: Not available")
+                
+                email = lead.get('email', '')
+                if email:
+                    st.markdown(f"**Email:** {email}")
+                else:
+                    st.text("Email: Not available")
+                
+                address = lead.get('address', '')
+                if address:
+                    st.text_area("Address", address, disabled=True)
+            
+            with col2:
+                st.subheader("Location")
+                st.text_input("City", lead.get('city', ''), disabled=True)
+                st.text_input("State", lead.get('state', ''), disabled=True)
+                
+                # Social Media
+                social_media = lead.get('social_media', {})
+                if social_media and isinstance(social_media, dict):
+                    st.subheader("Social Media")
+                    for platform, url in social_media.items():
+                        st.markdown(f"**{platform.title()}:** [{url}]({url})")
+        
+        with tab3:
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Lead Status")
+                
+                # Status update form
+                with st.form("update_status_form"):
+                    new_status = st.selectbox(
+                        "Update Status",
+                        CONFIG["lead_management"]["status_options"],
+                        index=CONFIG["lead_management"]["status_options"].index(lead.get('lead_status', 'New Lead')) 
+                        if lead.get('lead_status') in CONFIG["lead_management"]["status_options"] else 0
+                    )
+                    
+                    new_priority = st.selectbox(
+                        "Update Priority",
+                        CONFIG["lead_management"]["priority_options"],
+                        index=CONFIG["lead_management"]["priority_options"].index(lead.get('outreach_priority', 'Medium')) 
+                        if lead.get('outreach_priority') in CONFIG["lead_management"]["priority_options"] else 2
+                    )
+                    
+                    assigned_to = st.text_input("Assigned To", lead.get('assigned_to', ''))
+                    
+                    notes = st.text_area("Notes", lead.get('notes', ''), height=100)
+                    
+                    if st.form_submit_button("💾 Update Lead"):
+                        update_data = {
+                            'lead_status': new_status,
+                            'outreach_priority': new_priority,
+                            'assigned_to': assigned_to,
+                            'notes': notes
+                        }
+                        result = self.crm.update_lead(lead['id'], update_data)
+                        if result['success']:
+                            st.success("Lead updated successfully!")
+                            st.rerun()
+                        else:
+                            st.error(f"Error: {result['message']}")
+            
+            with col2:
+                st.subheader("Financial Information")
+                st.metric("Potential Value", f"${lead.get('potential_value', 0):,}")
+                
+                st.subheader("Timeline")
+                created = lead.get('created_at', '')
+                if created:
+                    st.text(f"Created: {created[:19]}")
+                
+                scraped = lead.get('scraped_date', '')
+                if scraped:
+                    st.text(f"Scraped: {scraped[:19]}")
+                
+                follow_up = lead.get('follow_up_date', '')
+                if follow_up:
+                    st.text(f"Follow-up: {follow_up}")
+        
+        with tab4:
+            st.subheader("Activity Timeline")
+            activities = lead.get('activities', [])
+            
+            if activities:
+                for activity in activities[:10]:  # Show last 10 activities
+                    with st.container():
+                        col1, col2 = st.columns([3, 1])
+                        with col1:
+                            st.markdown(f"**{activity.get('activity_type', 'Activity')}**")
+                            st.caption(activity.get('activity_details', ''))
+                        with col2:
+                            performed = activity.get('performed_at', '')
+                            if performed:
+                                st.caption(performed[:19])
+                        st.divider()
+            else:
+                st.info("No activities recorded yet.")
     
     def render_settings(self):
         """Render settings page"""
-        st.markdown("""
-        <h1 style="color: var(--text-dark); margin-bottom: 0.5rem;">
-            ⚙️ System Settings
-        </h1>
-        <p style="color: var(--text-light); font-size: 1rem; margin-bottom: 2rem;">
-            Configure your Mitz Leads CRM
-        </p>
-        """, unsafe_allow_html=True)
+        st.title("⚙️ Settings")
         
-        # Create tabs
-        tab1, tab2, tab3, tab4 = st.tabs(["🔑 API Keys", "🔍 Scraper", "🏢 Business", "📊 CRM"])
+        # Create tabs for different setting categories
+        tab1, tab2, tab3, tab4 = st.tabs(["🔑 API Keys", "🔍 Scraper Settings", "🏢 Business Settings", "📊 CRM Settings"])
         
         with tab1:
-            self._render_api_settings()
-        
-        with tab2:
-            self._render_scraper_settings()
-        
-        with tab3:
-            self._render_business_settings()
-        
-        with tab4:
-            self._render_crm_settings()
-    
-    def _render_api_settings(self):
-        """Render API settings"""
-        st.markdown("""
-        <div class="premium-card">
-            <h4 style="color: var(--text-dark); margin-bottom: 1.5rem;">API Configuration</h4>
-        """, unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
+            st.subheader("API Configuration")
+            
             serper_key = st.text_input(
                 "Serper API Key",
                 value=CONFIG.get("serper_api_key", ""),
                 type="password",
                 help="Get from https://serper.dev"
             )
-        
-        with col2:
+            
             openai_key = st.text_input(
                 "OpenAI API Key",
                 value=CONFIG.get("openai_api_key", ""),
                 type="password",
                 help="Get from https://platform.openai.com/api-keys"
             )
-        
-        if st.button("💾 Save API Keys", type="primary", use_container_width=True):
-            CONFIG["serper_api_key"] = serper_key
-            CONFIG["openai_api_key"] = openai_key
-            self.save_config()
-            st.success("✅ API keys saved successfully!")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    def _render_scraper_settings(self):
-        """Render scraper settings"""
-        st.markdown("""
-        <div class="premium-card">
-            <h4 style="color: var(--text-dark); margin-bottom: 1.5rem;">Scraper Configuration</h4>
-        """, unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            CONFIG["state"] = st.text_input("State", value=CONFIG.get("state", "PA"))
-            CONFIG["searches_per_cycle"] = st.number_input(
-                "Searches per Cycle", 
-                value=CONFIG.get("searches_per_cycle", 5),
-                min_value=1, max_value=50
-            )
-        
-        with col2:
-            CONFIG["cycle_interval"] = st.number_input(
-                "Cycle Interval (seconds)",
-                value=CONFIG.get("cycle_interval", 300),
-                min_value=10, max_value=3600
-            )
-            CONFIG["max_cycles"] = st.number_input(
-                "Max Cycles",
-                value=CONFIG.get("max_cycles", 100),
-                min_value=1, max_value=1000
-            )
-        
-        if st.button("💾 Save Scraper Settings", type="primary", use_container_width=True):
-            self.save_config()
-            st.success("✅ Scraper settings saved successfully!")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    def _render_business_settings(self):
-        """Render business settings"""
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("""
-            <div class="premium-card">
-                <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Cities</h4>
-            """, unsafe_allow_html=True)
             
-            cities_text = st.text_area(
-                "Cities (one per line)",
-                value="\n".join(CONFIG.get("cities", [])),
-                height=200,
-                label_visibility="collapsed"
-            )
+            if st.button("Save API Keys", type="primary"):
+                CONFIG["serper_api_key"] = serper_key
+                CONFIG["openai_api_key"] = openai_key
+                self.save_config()
+                st.success("API keys saved!")
+        
+        with tab2:
+            st.subheader("Scraper Configuration")
             
-            st.markdown("</div>", unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown("""
-            <div class="premium-card">
-                <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Industries</h4>
-            """, unsafe_allow_html=True)
-            
-            industries_text = st.text_area(
-                "Industries (one per line)",
-                value="\n".join(CONFIG.get("industries", [])),
-                height=200,
-                label_visibility="collapsed"
-            )
-            
-            st.markdown("</div>", unsafe_allow_html=True)
-        
-        if st.button("💾 Save Business Settings", type="primary", use_container_width=True):
-            CONFIG["cities"] = [city.strip() for city in cities_text.split("\n") if city.strip()]
-            CONFIG["industries"] = [industry.strip() for industry in industries_text.split("\n") if industry.strip()]
-            self.save_config()
-            st.success("✅ Business settings saved successfully!")
-    
-    def _render_crm_settings(self):
-        """Render CRM settings"""
-        st.markdown("""
-        <div class="premium-card">
-            <h4 style="color: var(--text-dark); margin-bottom: 1.5rem;">CRM Configuration</h4>
-        """, unsafe_allow_html=True)
-        
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            CONFIG["crm"]["enabled"] = st.checkbox("Enable CRM", value=CONFIG["crm"].get("enabled", True))
-            CONFIG["crm"]["auto_sync"] = st.checkbox("Auto Sync Leads", value=CONFIG["crm"].get("auto_sync", True))
-        
-        with col2:
-            CONFIG["crm"]["default_status"] = st.selectbox(
-                "Default Status",
-                options=CONFIG["lead_management"]["status_options"],
-                index=CONFIG["lead_management"]["status_options"].index(
-                    CONFIG["crm"].get("default_status", "New Lead"))
-                if CONFIG["crm"].get("default_status") in CONFIG["lead_management"]["status_options"] else 0
-            )
-        
-        # AI Settings
-        st.markdown("---")
-        st.markdown("#### 🤖 AI Enrichment")
-        
-        CONFIG["ai_enrichment"]["enabled"] = st.checkbox(
-            "Enable AI Enrichment",
-            value=CONFIG["ai_enrichment"].get("enabled", True)
-        )
-        
-        if CONFIG["ai_enrichment"]["enabled"]:
             col1, col2 = st.columns(2)
+            
             with col1:
-                CONFIG["ai_enrichment"]["model"] = st.selectbox(
-                    "Model",
-                    options=["gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"],
-                    index=0 if CONFIG["ai_enrichment"].get("model", "gpt-4o-mini") == "gpt-4o-mini" else 
-                            1 if CONFIG["ai_enrichment"].get("model") == "gpt-4" else 2
-                )
+                CONFIG["state"] = st.text_input("State", value=CONFIG.get("state", "PA"))
+                CONFIG["searches_per_cycle"] = st.number_input("Searches per Cycle", 
+                                                              value=CONFIG.get("searches_per_cycle", 5),
+                                                              min_value=1, max_value=50)
+                CONFIG["businesses_per_search"] = st.number_input("Businesses per Search",
+                                                                 value=CONFIG.get("businesses_per_search", 10),
+                                                                 min_value=1, max_value=100)
             
             with col2:
-                CONFIG["ai_enrichment"]["qualification_threshold"] = st.slider(
-                    "Qualification Threshold",
-                    min_value=0, max_value=100,
-                    value=CONFIG["ai_enrichment"].get("qualification_threshold", 60)
-                )
-        
-        if st.button("💾 Save CRM Settings", type="primary", use_container_width=True):
-            self.save_config()
-            st.success("✅ CRM settings saved successfully!")
-        
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    def render_analytics(self):
-        """Render analytics page"""
-        st.markdown("""
-        <h1 style="color: var(--text-dark); margin-bottom: 0.5rem;">
-            📈 Advanced Analytics
-        </h1>
-        <p style="color: var(--text-light); font-size: 1rem; margin-bottom: 2rem;">
-            Deep insights and performance metrics
-        </p>
-        """, unsafe_allow_html=True)
-        
-        # Get statistics
-        stats = self.crm.get_statistics(days=90)
-        
-        # Performance metrics
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.markdown(f"""
-            <div class="metric-card">
-                <h3>Conversion Rate</h3>
-                <div class="value">
-                    {stats["overall"]["closed_won"] / max(stats["overall"]["total_leads"], 1) * 100:.1f}%
-                </div>
-                <div class="delta">Won / Total</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col2:
-            st.markdown(f"""
-            <div class="metric-card" style="background: linear-gradient(135deg, var(--accent) 0%, #d97706 100%);">
-                <h3>Avg Lead Value</h3>
-                <div class="value">
-                    ${stats["overall"]["total_value"] / max(stats["overall"]["total_leads"], 1):,.0f}
-                </div>
-                <div class="delta">Per lead</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        with col3:
-            premium_rate = sum(1 for tier in stats["quality_distribution"] if tier["tier"] in ["Premium", "High"])
-            premium_rate = premium_rate / max(len(stats["quality_distribution"]), 1) * 100
-            st.markdown(f"""
-            <div class="metric-card" style="background: linear-gradient(135deg, var(--success) 0%, #059669 100%);">
-                <h3>Premium Rate</h3>
-                <div class="value">{premium_rate:.1f}%</div>
-                <div class="delta">Premium/High quality</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        # Daily leads chart
-        st.markdown("""
-        <div class="premium-card" style="margin-top: 2rem;">
-            <h4 style="color: var(--text-dark); margin-bottom: 1rem;">Daily Lead Acquisition (Last 90 Days)</h4>
-        """, unsafe_allow_html=True)
-        
-        daily_data = stats["daily_leads"]
-        if daily_data:
-            df_daily = pd.DataFrame(daily_data)
-            df_daily['date'] = pd.to_datetime(df_daily['date'])
-            df_daily = df_daily.sort_values('date')
+                CONFIG["cycle_interval"] = st.number_input("Cycle Interval (seconds)",
+                                                          value=CONFIG.get("cycle_interval", 300),
+                                                          min_value=10, max_value=3600)
+                CONFIG["max_cycles"] = st.number_input("Max Cycles",
+                                                      value=CONFIG.get("max_cycles", 100),
+                                                      min_value=1, max_value=1000)
+                CONFIG["operating_mode"] = st.selectbox("Operating Mode",
+                                                       options=["auto", "manual"],
+                                                       index=0 if CONFIG.get("operating_mode", "auto") == "auto" else 1)
             
-            fig_daily = px.area(
-                df_daily,
-                x='date',
-                y='count',
-                title='',
-                color_discrete_sequence=[CONFIG["ui"]["primary_color"]]
-            )
-            fig_daily.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)',
-                paper_bgcolor='rgba(0,0,0,0)',
-                xaxis_title="Date",
-                yaxis_title="Leads",
-                hovermode='x unified',
-                showlegend=False
-            )
-            st.plotly_chart(fig_daily, use_container_width=True)
-        else:
-            st.info("No daily data available")
+            if st.button("Save Scraper Settings", type="primary"):
+                self.save_config()
+                st.success("Scraper settings saved!")
         
-        st.markdown("</div>", unsafe_allow_html=True)
+        with tab3:
+            st.subheader("Business Settings")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Cities")
+                cities_text = st.text_area("Cities (one per line)",
+                                          value="\n".join(CONFIG.get("cities", [])),
+                                          height=200)
+                if cities_text:
+                    CONFIG["cities"] = [city.strip() for city in cities_text.split("\n") if city.strip()]
+            
+            with col2:
+                st.subheader("Industries")
+                industries_text = st.text_area("Industries (one per line)",
+                                              value="\n".join(CONFIG.get("industries", [])),
+                                              height=200)
+                if industries_text:
+                    CONFIG["industries"] = [industry.strip() for industry in industries_text.split("\n") if industry.strip()]
+            
+            st.subheader("Search Phrases")
+            search_phrases_text = st.text_area("Search Phrases (one per line)",
+                                              value="\n".join(CONFIG.get("search_phrases", [])),
+                                              height=150,
+                                              help="Use {industry}, {city}, {state} as placeholders")
+            if search_phrases_text:
+                CONFIG["search_phrases"] = [phrase.strip() for phrase in search_phrases_text.split("\n") if phrase.strip()]
+            
+            if st.button("Save Business Settings", type="primary"):
+                self.save_config()
+                st.success("Business settings saved!")
+        
+        with tab4:
+            st.subheader("CRM Configuration")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                CONFIG["crm"]["enabled"] = st.checkbox("Enable CRM", value=CONFIG["crm"].get("enabled", True))
+                CONFIG["crm"]["auto_sync"] = st.checkbox("Auto Sync Leads", value=CONFIG["crm"].get("auto_sync", True))
+                CONFIG["crm"]["prevent_duplicates"] = st.checkbox("Prevent Duplicates", 
+                                                                 value=CONFIG["crm"].get("prevent_duplicates", True))
+            
+            with col2:
+                CONFIG["crm"]["default_status"] = st.selectbox("Default Status",
+                                                              options=CONFIG["lead_management"]["status_options"],
+                                                              index=CONFIG["lead_management"]["status_options"].index(
+                                                                  CONFIG["crm"].get("default_status", "New Lead"))
+                                                              if CONFIG["crm"].get("default_status") in CONFIG["lead_management"]["status_options"] else 0)
+                
+                CONFIG["crm"]["default_assigned_to"] = st.text_input("Default Assigned To",
+                                                                     value=CONFIG["crm"].get("default_assigned_to", ""))
+            
+            # AI Settings
+            st.subheader("AI Enrichment")
+            CONFIG["ai_enrichment"]["enabled"] = st.checkbox("Enable AI Enrichment",
+                                                            value=CONFIG["ai_enrichment"].get("enabled", True))
+            
+            if CONFIG["ai_enrichment"]["enabled"]:
+                col1, col2 = st.columns(2)
+                with col1:
+                    CONFIG["ai_enrichment"]["model"] = st.selectbox("Model",
+                                                                   options=["gpt-4o-mini", "gpt-4", "gpt-3.5-turbo"],
+                                                                   index=0 if CONFIG["ai_enrichment"].get("model", "gpt-4o-mini") == "gpt-4o-mini" else 
+                                                                          1 if CONFIG["ai_enrichment"].get("model") == "gpt-4" else 2)
+                with col2:
+                    CONFIG["ai_enrichment"]["qualification_threshold"] = st.slider("Qualification Threshold",
+                                                                                  min_value=0, max_value=100,
+                                                                                  value=CONFIG["ai_enrichment"].get("qualification_threshold", 60))
+            
+            if st.button("Save CRM Settings", type="primary"):
+                self.save_config()
+                st.success("CRM settings saved!")
     
     def render_logs(self):
         """Render logs page"""
-        st.markdown("""
-        <h1 style="color: var(--text-dark); margin-bottom: 0.5rem;">
-            📋 System Logs
-        </h1>
-        <p style="color: var(--text-light); font-size: 1rem; margin-bottom: 2rem;">
-            Monitor system activities and events
-        </p>
-        """, unsafe_allow_html=True)
+        st.title("📋 System Logs")
         
-        # Implementation similar to original logs page
-        # [Include logs rendering code from original]
+        # Load logs
+        log_file = CONFIG["storage"]["logs_file"]
+        logs = []
+        
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, "r") as f:
+                    logs = json.load(f)
+            except:
+                st.error("Could not load logs file")
+        
+        if logs:
+            # Filter options
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                level_filter = st.selectbox("Filter by Level", 
+                                           ["All", "INFO", "SUCCESS", "WARNING", "ERROR", "DEBUG"])
+            
+            with col2:
+                date_filter = st.date_input("Filter by Date", value=None)
+            
+            with col3:
+                search_term = st.text_input("Search Logs", placeholder="Search message content...")
+            
+            # Apply filters
+            filtered_logs = logs
+            
+            if level_filter != "All":
+                filtered_logs = [log for log in filtered_logs if log.get("level") == level_filter]
+            
+            if date_filter:
+                date_str = date_filter.isoformat()
+                filtered_logs = [log for log in filtered_logs if log.get("timestamp", "").startswith(date_str)]
+            
+            if search_term:
+                filtered_logs = [log for log in filtered_logs if search_term.lower() in log.get("message", "").lower()]
+            
+            # Display logs
+            st.subheader(f"Log Entries ({len(filtered_logs)})")
+            
+            # Create dataframe for display
+            if filtered_logs:
+                # Reverse to show newest first
+                filtered_logs.reverse()
+                
+                df_logs = pd.DataFrame(filtered_logs[:100])  # Show last 100 logs
+                
+                # Format timestamps
+                if 'timestamp' in df_logs.columns:
+                    df_logs['timestamp'] = pd.to_datetime(df_logs['timestamp']).dt.strftime('%Y-%m-%d %H:%M:%S')
+                
+                # Color code levels
+                def color_level(level):
+                    colors = {
+                        'INFO': 'blue',
+                        'SUCCESS': 'green',
+                        'WARNING': 'orange',
+                        'ERROR': 'red',
+                        'DEBUG': 'gray'
+                    }
+                    color = colors.get(level, 'black')
+                    return f'<span style="color: {color}; font-weight: bold;">{level}</span>'
+                
+                # Display as HTML table
+                html = df_logs.to_html(escape=False, 
+                                      formatters={'level': color_level},
+                                      index=False,
+                                      classes='dataframe-table')
+                st.markdown(html, unsafe_allow_html=True)
+            else:
+                st.info("No logs match the current filters.")
+            
+            # Clear logs button
+            if st.button("🗑️ Clear All Logs", type="secondary"):
+                if os.path.exists(log_file):
+                    with open(log_file, "w") as f:
+                        json.dump([], f)
+                    st.success("Logs cleared!")
+                    st.rerun()
+        else:
+            st.info("No logs available yet.")
     
     def render_export(self):
         """Render export page"""
-        st.markdown("""
-        <h1 style="color: var(--text-dark); margin-bottom: 0.5rem;">
-            📤 Export Data
-        </h1>
-        <p style="color: var(--text-light); font-size: 1rem; margin-bottom: 2rem;">
-            Export leads in various formats
-        </p>
-        """, unsafe_allow_html=True)
+        st.title("📤 Export Data")
         
-        # Implementation similar to original export page
-        # [Include export rendering code from original]
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("Export Options")
+            
+            export_format = st.radio(
+                "Export Format",
+                ["CSV", "JSON", "Excel"],
+                horizontal=True
+            )
+            
+            include_columns = st.multiselect(
+                "Select Columns to Include",
+                options=[
+                    "business_name", "website", "phone", "email", "address",
+                    "city", "state", "industry", "business_type", "services",
+                    "lead_score", "quality_tier", "potential_value", "lead_status",
+                    "assigned_to", "created_at", "scraped_date"
+                ],
+                default=["business_name", "phone", "email", "city", "lead_score", "quality_tier", "lead_status"]
+            )
+            
+            # Date range filter
+            st.subheader("Date Range")
+            col_date1, col_date2 = st.columns(2)
+            with col_date1:
+                date_from = st.date_input("From Date", value=None)
+            with col_date2:
+                date_to = st.date_input("To Date", value=None)
+        
+        with col2:
+            st.subheader("Filters")
+            
+            status_filter = st.multiselect(
+                "Status",
+                options=CONFIG["lead_management"]["status_options"],
+                default=[]
+            )
+            
+            quality_filter = st.multiselect(
+                "Quality Tier",
+                options=CONFIG["lead_management"]["quality_tiers"],
+                default=[]
+            )
+            
+            city_filter = st.multiselect(
+                "City",
+                options=CONFIG["cities"],
+                default=[]
+            )
+        
+        # Apply filters
+        filters = {}
+        if status_filter:
+            filters["status"] = status_filter[0]  # For now, just use first selected
+        if quality_filter:
+            filters["quality_tier"] = quality_filter[0]
+        if city_filter:
+            filters["city"] = city_filter[0]
+        if date_from:
+            filters["date_from"] = date_from.isoformat()
+        if date_to:
+            filters["date_to"] = date_to.isoformat()
+        
+        # Get filtered data
+        leads_data = self.crm.get_leads(filters=filters, page=1, per_page=10000)
+        leads = leads_data["leads"]
+        
+        st.metric("Leads to Export", len(leads))
+        
+        if leads:
+            # Convert to DataFrame
+            df = pd.DataFrame(leads)
+            
+            # Filter columns
+            if include_columns:
+                available_cols = [col for col in include_columns if col in df.columns]
+                df = df[available_cols]
+            
+            # Preview
+            st.subheader("Preview")
+            st.dataframe(df.head(10), use_container_width=True)
+            
+            # Export buttons
+            st.subheader("Download")
+            
+            if export_format == "CSV":
+                csv = df.to_csv(index=False)
+                st.download_button(
+                    label="📥 Download CSV",
+                    data=csv,
+                    file_name=f"leads_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    type="primary"
+                )
+            
+            elif export_format == "JSON":
+                json_str = df.to_json(orient="records", indent=2)
+                st.download_button(
+                    label="📥 Download JSON",
+                    data=json_str,
+                    file_name=f"leads_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                    mime="application/json",
+                    type="primary"
+                )
+            
+            elif export_format == "Excel":
+                # For Excel export, we need to use a buffer
+                import io
+                buffer = io.BytesIO()
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    df.to_excel(writer, index=False, sheet_name='Leads')
+                
+                st.download_button(
+                    label="📥 Download Excel",
+                    data=buffer.getvalue(),
+                    file_name=f"leads_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary"
+                )
+        else:
+            st.warning("No leads to export with the current filters.")
     
     def save_config(self):
         """Save configuration to file"""
         try:
             with open(CONFIG_FILE, "w") as f:
                 json.dump(CONFIG, f, indent=2)
+            logger.log("Configuration saved", "SUCCESS")
             return True
         except Exception as e:
-            st.error(f"Error saving config: {e}")
+            logger.log(f"Error saving config: {e}", "ERROR")
             return False
     
     def run(self):
-        """Run the premium dashboard"""
+        """Run the Streamlit dashboard"""
         if not self.enabled:
-            st.error("Dashboard not available. Please install required packages.")
+            logger.log("Streamlit dashboard not available", "WARNING")
             return
         
-        # Render sidebar
-        self.render_premium_sidebar()
+        # Initialize session state
+        if 'scraper_running' not in st.session_state:
+            st.session_state.scraper_running = False
         
-        # Render main content based on current page
-        if st.session_state.current_page == "Dashboard":
+        if 'scraper_stats' not in st.session_state:
+            st.session_state.scraper_stats = {}
+        
+        # Render sidebar and get selected page
+        page = self.render_sidebar()
+        
+        # Render selected page
+        if page == "Dashboard":
             self.render_dashboard()
-        elif st.session_state.current_page == "Leads":
+        elif page == "Leads":
             self.render_leads()
-        elif st.session_state.current_page == "Lead Details":
-            self.render_lead_details()
-        elif st.session_state.current_page == "Settings":
+        elif page == "Lead Details":
+            # For lead details, we need a lead ID
+            lead_id = st.number_input("Enter Lead ID", min_value=1, value=1)
+            if lead_id:
+                self.render_lead_detail(lead_id=lead_id)
+            else:
+                st.info("Enter a Lead ID to view details")
+        elif page == "Settings":
             self.render_settings()
-        elif st.session_state.current_page == "Analytics":
-            self.render_analytics()
-        elif st.session_state.current_page == "Logs":
+        elif page == "Logs":
             self.render_logs()
-        elif st.session_state.current_page == "Export":
+        elif page == "Export":
             self.render_export()
         
-        # Auto-refresh if scraper is running
+        # Auto-refresh every 30 seconds if scraper is running
         if st.session_state.scraper_running:
             st_autorefresh(interval=30000, limit=100, key="scraper_refresh")
 
@@ -2000,25 +2711,30 @@ class PremiumDashboard:
 
 def main():
     print("\n" + "="*80)
-    print("🚀 MITZ LEADS CRM - PREMIUM EDITION v6.0")
+    print("🚀 COMPREHENSIVE LEAD SCRAPER CRM - STREAMLIT EDITION")
     print("="*80)
-    print("✨ Features:")
-    print("  ✅ Professional dashboard with modern UI")
-    print("  ✅ Persistent scraper state across refreshes")
-    print("  ✅ Premium design with gradients and animations")
+    print("Features:")
     print("  ✅ Complete lead management with detailed views")
-    print("  ✅ Advanced analytics and reporting")
+    print("  ✅ Full configuration editing from dashboard")
+    print("  ✅ Real-time statistics and monitoring")
+    print("  ✅ Advanced filtering and search")
     print("  ✅ AI-powered lead qualification")
-    print("  ✅ Full configuration management")
     print("  ✅ Export functionality (CSV, JSON, Excel)")
+    print("  ✅ System logs viewer")
+    print("  ✅ Beautiful Streamlit interface")
     print("="*80)
     
     # Check API keys
-    if not CONFIG.get("serper_api_key"):
-        print("\n⚠️  Serper API key not configured")
+    if not CONFIG.get("serper_api_key") or CONFIG.get("serper_api_key") == "bab72f11620025db8aee1df5b905b9d9b6872a00":
+        print("\n❌ Update Serper API key in config.json")
+        print("   Get from: https://serper.dev")
+        print("   Current config file: config.json")
     
-    if not CONFIG.get("openai_api_key", "").startswith("sk-"):
+    if CONFIG.get("openai_api_key", "").startswith("sk-proj-your-key-here"):
         print("\n⚠️  OpenAI API key not configured - AI features disabled")
+        print("   Get from: https://platform.openai.com/api-keys")
+    elif OPENAI_AVAILABLE:
+        print("\n✅ OpenAI configured - AI features enabled")
     
     print(f"\n🎯 State: {CONFIG['state']}")
     print(f"🏙️  Cities: {len(CONFIG['cities'])}")
@@ -2029,11 +2745,11 @@ def main():
     # Check Streamlit availability
     if not STREAMLIT_AVAILABLE:
         print("\n❌ Streamlit dependencies not installed")
-        print("   Install with: pip install streamlit pandas plotly streamlit-option-menu streamlit-autorefresh")
+        print("   Install with: pip install streamlit pandas plotly streamlit-autorefresh")
         return
     
-    # Create and run premium dashboard
-    dashboard = PremiumDashboard()
+    # Create and run dashboard
+    dashboard = StreamlitDashboard()
     
     if not dashboard.enabled:
         print("\n❌ Dashboard failed to initialize")
@@ -2041,46 +2757,17 @@ def main():
     
     print(f"\n🌐 Starting Streamlit dashboard on port {CONFIG['dashboard']['port']}...")
     print(f"📱 Access at: http://localhost:{CONFIG['dashboard']['port']}")
-    print("\n🎨 Premium features:")
-    print("  • Modern gradient-based UI")
-    print("  • Persistent scraper state")
-    print("  • Professional card design")
-    print("  • Smooth animations")
-    print("  • Dark theme sidebar")
-    print("  • Responsive layout")
+    print("\n📊 Available features:")
+    print("  • Dashboard with real-time stats")
+    print("  • Lead management with filtering")
+    print("  • Lead details view")
+    print("  • Settings configuration")
+    print("  • System logs viewer")
+    print("  • Export functionality (CSV, JSON, Excel)")
+    print("  • Auto-scraping with configurable intervals")
     print("="*80)
     
-    # Add JavaScript for page navigation
-    st.markdown("""
-    <script>
-    function setPage(page) {
-        window.parent.setPage = function(p) {
-            if (p) {
-                window.location.href = window.location.href.split('?')[0] + '?page=' + p;
-            }
-        }
-        window.parent.setPage(page);
-    }
-    
-    function viewLead(id) {
-        setPage('Lead Details');
-        // You would need to pass the ID through URL parameters
-        // or use session storage for a more complete implementation
-    }
-    
-    function startScraper() {
-        // This would trigger a scraper start
-        console.log('Starting scraper...');
-    }
-    </script>
-    """, unsafe_allow_html=True)
-    
-    # Get page from URL parameters
-    params = st.query_params
-    if 'page' in params:
-        st.session_state.current_page = params['page']
-    
-    # Run the dashboard
+    # Run Streamlit app
     dashboard.run()
 
 # ============================================================================

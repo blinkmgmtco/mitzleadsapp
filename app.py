@@ -327,13 +327,36 @@ class CRM_Database:
         self.conn = None
         self.cursor = None
         self.setup_database()
-    
-    def setup_database(self):
-        """Initialize database with tables"""
-        try:
-            self.conn = sqlite3.connect(self.db_file, check_same_thread=False)
-            self.conn.row_factory = sqlite3.Row
-            self.cursor = self.conn.cursor()
+def setup_database(self):
+    """Initialize database with tables - UPDATED WITH ALL NEW COLUMNS"""
+    try:
+        self.conn = sqlite3.connect(self.db_file, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self.cursor = self.conn.cursor()
+        
+        # Check existing table structure
+        self.cursor.execute("PRAGMA table_info(leads)")
+        existing_columns = {row[1] for row in self.cursor.fetchall()}
+        
+        # Required new columns
+        new_columns = [
+            ("has_website", "BOOLEAN DEFAULT 1"),
+            ("google_business_profile", "TEXT"),
+            ("running_google_ads", "BOOLEAN DEFAULT 0"),
+            ("ad_transparency_url", "TEXT"),
+            ("yelp_url", "TEXT"),
+            ("bbb_url", "TEXT")
+        ]
+        
+        # Add missing columns
+        for column_name, column_type in new_columns:
+            if column_name not in existing_columns:
+                try:
+                    self.cursor.execute(f"ALTER TABLE leads ADD COLUMN {column_name} {column_type}")
+                    print(f"✅ Added column: {column_name}")
+                except Exception as e:
+                    print(f"⚠️ Could not add column {column_name}: {e}")
+        
             
             # Leads table with enhanced columns
             self.cursor.execute('''

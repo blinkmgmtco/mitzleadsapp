@@ -68,8 +68,10 @@ except ImportError:
 DEFAULT_CONFIG = {
     "machine_id": "mitz-leads-crm-v1",
     "machine_version": "5.0",
-    "serper_api_key": "",
-    "openai_api_key": "",
+    "serper_api_key": "bab72f11620025db8aee1df5b905b9d9b6872a00",
+    "openai_api_key": "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",
+
+  "crm": {
     
     "crm": {
         "enabled": True,
@@ -973,7 +975,7 @@ class WebsiteScraper:
         
         self.openai_client = None
         if OPENAI_AVAILABLE:
-            api_key = CONFIG.get("openai_api_key", "")
+            api_key = CONFIG.get("openai_api_key", "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")
             if api_key and not api_key.startswith("sk-proj-your-key-here"):
                 try:
                     self.openai_client = openai.OpenAI(api_key=api_key)
@@ -2681,7 +2683,7 @@ class PremiumDashboard:
             
             openai_key = st.text_input(
                 "OpenAI API Key",
-                value=CONFIG.get("openai_api_key", ""),
+                value=CONFIG.get("openai_api_key", "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"),
                 type="password",
                 help="Get from https://platform.openai.com/api-keys"
             )

@@ -1568,7 +1568,7 @@ class MitzMediaDashboard:
         with tab3:
             self.render_lead_analytics(lead_data)
         
-        with tab3:
+        with tab4:
             self.render_lead_activity(lead_data)
     
     def render_lead_overview(self, lead_data):
@@ -2101,7 +2101,6 @@ class MitzMediaDashboard:
     
     def prepare_export_data(self, **kwargs):
         """Prepare data for export"""
-        # This is a simplified version - implement based on your needs
         conn = self.crm.get_connection()
         try:
             query = "SELECT * FROM leads WHERE is_archived = 0"
@@ -2114,7 +2113,6 @@ class MitzMediaDashboard:
         """Start the scraper in a separate thread"""
         if not st.session_state.scraper_running:
             st.session_state.scraper_running = True
-            # Start scraper thread here
             logger.log("Scraper started", "SUCCESS")
     
     def stop_scraper(self):

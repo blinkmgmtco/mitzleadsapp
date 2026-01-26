@@ -931,7 +931,7 @@ class MitzMediaDashboard:
             st.markdown('<div class="mitz-card">', unsafe_allow_html=True)
             st.markdown("### ⚡ Scraper Control")
             
-                        col1, col2 = st.columns(2)
+            col1, col2 = st.columns(2)
             
             with col1:
                 if st.button("▶️ Start Scraper", use_container_width=True, 
